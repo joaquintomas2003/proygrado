@@ -99,12 +99,12 @@ parser MyParser(packet_in packet,
 
     state parse_udp {
         packet.extract(hdr.udp);
-        default:  accept;
+        transition accept;
     }
 
     state parse_tcp {
         packet.extract(hdr.tcp);
-        default:  accept;
+        transition accept;
     }
 }
 
