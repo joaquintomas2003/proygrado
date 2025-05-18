@@ -198,8 +198,10 @@ control MyDeparser(packet_out packet, in headers hdr) {
   apply {
     packet.emit(hdr.ethernet);
     packet.emit(hdr.ipv4);
-    packet.emit(hdr.udp);
-    packet.emit(hdr.tcp);
+    if (hdr.udp.isValid())
+      packet.emit(hdr.udp);
+    if (hdr.tcp.isValid())
+      packet.emit(hdr.tcp);
   }
 }
 
