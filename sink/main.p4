@@ -130,10 +130,14 @@ control MyIngress(inout headers hdr,
     }
 
     action ipv4_forward(mac_addr_t dst_addr, egress_spec_t port) {
-      standard_metadata.egress_spec = port;
-      hdr.ethernet.src_addr = hdr.ethernet.dst_addr;
-      hdr.ethernet.dst_addr = dst_addr;
-      hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
+      if (hdr.ipv4.ttl > 0) {
+        standard_metadata.egress_spec = port;
+        hdr.ethernet.src_addr = hdr.ethernet.dst_addr;
+        hdr.ethernet.dst_addr = dst_addr;
+        hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
+      } else {
+        mark_to_drop(standard_metadata);
+      }
     }
 
     table ipv4_lpm {
