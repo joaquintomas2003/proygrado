@@ -19,13 +19,13 @@ INT_TYPE = 1              # 1 = INT-MD
 NPT_L4 = 2                # indicates that another (the original) L4 header follows the INT stack
 HOP_METADATA_LEN = 2      # 2 * 4B = 8 bytes per hop
 REMAINING_HOPS = 1
-INSTRUCTION_BITMAP = 0b11000000000000000000000000000000  # Node ID + Hop Latency (bit 0 + bit 2)
+INSTRUCTION_BITMAP = 0b00000000000000000000000000000101  # Node ID + Hop Latency (bit 0 + bit 2)
 
 
 def build_int_shim():
     # Type(4b)=1, NPT(2b)=2, Reserved(2b)=0 => 0b0001_10_00 = 0x18
     shim_type = (INT_TYPE << 4) | (NPT_L4 << 2)
-    shim_len = 7  # (INT-MD header + 3 hops * 8 bytes) = 12 + 24 = 36B => 36/4 = 9
+    shim_len = 9  # (INT-MD header + 3 hops * 8 bytes) = 12 + 24 = 36B => 36/4 = 9
     shim_proto = ORIGINAL_PROTO
     return struct.pack("!BBH", shim_type, shim_len, shim_proto)
 
@@ -34,7 +34,7 @@ def build_int_md_header():
     reserved = 0x00
     hop_ml = HOP_METADATA_LEN
     rhc = REMAINING_HOPS
-    header_part1 = struct.pack("!BBBx", ver_d_e_m, hop_ml, rhc)
+    header_part1 = struct.pack("!BBBB", ver_d_e_m, reserved, hop_ml, rhc)
 
     instruction_bitmap = INSTRUCTION_BITMAP
     domain_id = 0x0000

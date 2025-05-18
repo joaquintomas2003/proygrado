@@ -2,7 +2,7 @@
 - Python3
 - scapy
 
-## Instalacion en mac
+## Instalación en mac
 ```
 brew install python@3.13
 python3 -m venv venv
