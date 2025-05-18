@@ -7,32 +7,32 @@ const bit<16> TYPE_IPV4 = 0x800;
 *********************** H E A D E R S  ***********************************
 *************************************************************************/
 
-typedef bit<9> egressSpec_t;
-typedef bit<48> macAddr_t;
-typedef bit<32> ip4Addr_t;
+typedef bit<9> egress_spec_t;
+typedef bit<48> mac_addr_t;
+typedef bit<32> ipv4_addr_t;
 
 const bit<8>  IP_PROTO_UDP = 0x11;
 const bit<8>  IP_PROTO_TCP = 0x6;
 
 header ethernet_t {
-  macAddr_t dstAddr;
-  macAddr_t srcAddr;
-  bit<16> etherType;
+  mac_addr_t dst_addr;
+  mac_addr_t src_addr;
+  bit<16> type;
 }
 
 header ipv4_t {
   bit<4> version;
   bit<4> ihl;
   bit<8> diffserv;
-  bit<16> totalLen;
+  bit<16> total_len;
   bit<16> identification;
   bit<3> flags;
-  bit<13> fragOffset;
+  bit<13> frag_offset;
   bit<8> ttl;
   bit<8> protocol;
-  bit<16> hdrChecksum;
-  ip4Addr_t srcAddr;
-  ip4Addr_t dstAddr;
+  bit<16> hdr_checksum;
+  ipv4_addr_t src_addr;
+  ipv4_addr_t dst_addr;
 }
 
 header udp_t {
@@ -78,7 +78,7 @@ parser MyParser(packet_in packet,
 
     state parse_ethernet {
         packet.extract(hdr.ethernet);
-        transition select(hdr.ethernet.etherType) {
+        transition select(hdr.ethernet.ether_type) {
             TYPE_IPV4: parse_ipv4;
             default: accept;
         }
@@ -125,16 +125,16 @@ control MyIngress(inout headers hdr,
       mark_to_drop(standard_metadata);
     }
 
-    action ipv4_forward(macAddr_t dstAddr, egressSpec_t port) {
+    action ipv4_forward(mac_addr_t dst_addr, egress_spec_t port) {
       standard_metadata.egress_spec = port;
-      hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
-      hdr.ethernet.dstAddr = dstAddr;
+      hdr.ethernet.src_addr = hdr.ethernet.dst_addr;
+      hdr.ethernet.dst_addr = dst_addr;
       hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
     }
 
     table ipv4_lpm {
       key = {
-        hdr.ipv4.dstAddr: lpm;
+        hdr.ipv4.dst_addr: lpm;
       }
       actions = {
         ipv4_forward;
@@ -173,15 +173,15 @@ control MyComputeChecksum(inout headers  hdr, inout metadata meta) {
             { hdr.ipv4.version,
               hdr.ipv4.ihl,
               hdr.ipv4.diffserv,
-              hdr.ipv4.totalLen,
+              hdr.ipv4.total_len,
               hdr.ipv4.identification,
               hdr.ipv4.flags,
-              hdr.ipv4.fragOffset,
+              hdr.ipv4.frag_offset,
               hdr.ipv4.ttl,
               hdr.ipv4.protocol,
-              hdr.ipv4.srcAddr,
-              hdr.ipv4.dstAddr },
-            hdr.ipv4.hdrChecksum,
+              hdr.ipv4.src_addr,
+              hdr.ipv4.dst_addr },
+            hdr.ipv4.hdr_checksum,
             HashAlgorithm.csum16);
     }
 }
