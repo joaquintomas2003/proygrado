@@ -1,1 +1,4 @@
 .DS_Store
+sink/out/
+sink/pifout/
+Makefile-nfp4build
