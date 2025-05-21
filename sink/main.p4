@@ -25,7 +25,8 @@ header ethernet_t {
 header ipv4_t {
   bit<4> version;
   bit<4> ihl;
-  bit<8> diffserv;
+  bit<6> dscp;
+  bit<2> ecn;
   bit<16> total_len;
   bit<16> identification;
   bit<3> flags;
@@ -178,8 +179,6 @@ parser MyParser(packet_in packet,
 
     state parse_udp {
         packet.extract(hdr.udp);
-        local_metadata.l4_src_port = hdr.udp.src_port;
-        local_metadata.l4_dst_port = hdr.udp.dst_port;
         transition select(hdr.ipv4.dscp) {
             DSCP_INT &&& DSCP_MASK: parse_shim;
             default:  accept;
@@ -188,8 +187,6 @@ parser MyParser(packet_in packet,
 
     state parse_tcp {
         packet.extract(hdr.tcp);
-        local_metadata.l4_src_port = hdr.tcp.src_port;
-        local_metadata.l4_dst_port = hdr.tcp.dst_port;
         transition select(hdr.ipv4.dscp) {
             DSCP_INT &&& DSCP_MASK: parse_shim;
             default:  accept;
@@ -229,17 +226,13 @@ control MyIngress(inout headers hdr,
                   inout standard_metadata_t standard_metadata) {
 
     action drop() {
-      mark_to_drop(standard_metadata);
     }
 
     action ipv4_forward(mac_addr_t dst_addr, egress_spec_t port) {
       if (hdr.ipv4.ttl > 0) {
-        standard_metadata.egress_spec = port;
         hdr.ethernet.src_addr = hdr.ethernet.dst_addr;
         hdr.ethernet.dst_addr = dst_addr;
         hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
-      } else {
-        mark_to_drop(standard_metadata);
       }
     }
 
@@ -283,7 +276,8 @@ control MyComputeChecksum(inout headers  hdr, inout metadata meta) {
             hdr.ipv4.isValid(),
             { hdr.ipv4.version,
               hdr.ipv4.ihl,
-              hdr.ipv4.diffserv,
+              hdr.ipv4.dscp,
+              hdr.ipv4.ecn,
               hdr.ipv4.total_len,
               hdr.ipv4.identification,
               hdr.ipv4.flags,
@@ -305,10 +299,10 @@ control MyDeparser(packet_out packet, in headers hdr) {
   apply {
     packet.emit(hdr.ethernet);
     packet.emit(hdr.ipv4);
-    if (hdr.udp.isValid())
-      packet.emit(hdr.udp);
-    if (hdr.tcp.isValid())
-      packet.emit(hdr.tcp);
+    packet.emit(hdr.udp);
+    packet.emit(hdr.tcp);
+    packet.emit(hdr.intl4_shim);
+    packet.emit(hdr.int_header);
   }
 }
 
