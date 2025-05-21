@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+
+set -e
+
+# Get the directory where this script lives (e.g., bin/)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Assume the sink directory is in the root of the project, relative to bin/
+SINK_DIR="$SCRIPT_DIR/../sink"
+
+COMMAND=$1
+shift
+
+FIRMWARE_PATH="$SINK_DIR/out/firmware.nffw"
+PIF_JSON_PATH="$SINK_DIR/pifout/pif_design.json"
+SOURCE_CODE="$SINK_DIR/main.p4"
+USER_CONFIG="$SINK_DIR/config.p4cfg"
+
+case "$COMMAND" in
+  compile)
+    echo "Compiling P4 program..."
+    cd "$SINK_DIR"
+    /opt/netronome/p4/bin/nfp4build --nfp4c_p4_version 16 --no-debug-info -p pifout -o "$FIRMWARE_PATH" -l lithium -4 "$SOURCE_CODE"
+    echo "✅ Compilation complete"
+    ;;
+
+  load)
+    echo "Loading firmware onto SmartNIC..."
+    cd "$SINK_DIR"
+    /opt/netronome/p4/bin/rtecli design-load -f "$FIRMWARE_PATH" -p "$PIF_JSON_PATH"
+    echo "✅ Firmware loaded"
+    ;;
+
+  config)
+    echo "Reloading configuration..."
+    cd "$SINK_DIR"
+    /opt/netronome/p4/bin/rtecli config-reload -c "$USER_CONFIG"
+    echo "✅ Configuration reloaded"
+    ;;
+
+  help|--help|-h|"")
+    echo "Usage: bin/p4 [command]"
+    echo ""
+    echo "Commands:"
+    echo "  compile    Compile the P4 program"
+    echo "  load       Load compiled firmware onto SmartNIC"
+    echo "  config     Load SmartNIC config tables"
+    echo "  help       Show this help message"
+    ;;
+
+  *)
+    echo "❌ Unknown command: $COMMAND"
+    echo "Use 'bin/p4 help' to see available commands."
+    exit 1
+    ;;
+esac
