@@ -23,39 +23,41 @@ parser MyParser(packet_in packet,
     packet.extract(hdr.ipv4);
     transition select(hdr.ipv4.protocol) {
       IP_PROTO_UDP: parse_udp;
-      IP_PROTO_TCP: parse_tcp;
       default: accept;
     }
   }
 
   state parse_udp {
     packet.extract(hdr.udp);
-    transition select(hdr.ipv4.dscp) {
-      DSCP_INT &&& DSCP_MASK: parse_shim;
-      default:  accept;
-    }
-  }
-
-  state parse_tcp {
-    packet.extract(hdr.tcp);
-    transition select(hdr.ipv4.dscp) {
-      DSCP_INT &&& DSCP_MASK: parse_shim;
+    transition select(hdr.udp.dst_port) {
+      5000: parse_shim;
       default:  accept;
     }
   }
 
   state parse_shim {
     packet.extract(hdr.intl4_shim);
+    meta.stack_size = hdr.intl4_shim.len - 3; // 3-4 bytes for int header
     transition parse_int_hdr;
   }
 
   state parse_int_hdr {
     packet.extract(hdr.int_header);
-    transition parse_int_data;
+    meta.counter = 0;
+    transition parse_stack;
   }
 
-  state parse_int_data {
-    transition accept;
+  state parse_stack {
+    transition select(meta.counter < meta.stack_size) {
+      true: parse_stack_element;
+      false: accept;
+    }
+  }
+
+  state parse_stack_element {
+    packet.extract(hdr.int_stack.next);
+    meta.counter = meta.counter + 1;
+    transition parse_stack;
   }
 }
 
@@ -101,7 +103,6 @@ control MyDeparser(packet_out packet, in headers hdr) {
     packet.emit(hdr.ethernet);
     packet.emit(hdr.ipv4);
     packet.emit(hdr.udp);
-    packet.emit(hdr.tcp);
     packet.emit(hdr.intl4_shim);
     packet.emit(hdr.int_header);
   }

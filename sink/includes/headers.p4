@@ -76,53 +76,19 @@ header int_header_t {
   bit<12> rsvd1;
   bit<5> hop_metadata_len;
   bit<8> remaining_hop_cnt;
-  bit<4> instruction_mask_0003; /* split the bits for lookup */
-  bit<4> instruction_mask_0407;
-  bit<4> instruction_mask_0811;
-  bit<4> instruction_mask_1215;
+  bit<16> instruction;
   bit<16> domain_specific_id;     // Unique INT Domain ID
   bit<16> ds_instruction;         // Instruction bitmap specific to the INT Domain identified by the Domain specific ID
   bit<16> ds_flags;               // Domain specific flags
 }
 
-header int_switch_id_t {
-  bit<32> switch_id;
+header stack_element_t {
+  bit<32> data;
 }
 
-header int_level1_port_ids_t {
-  bit<16> ingress_port_id;
-  bit<16> egress_port_id;
-}
-
-header int_hop_latency_t {
-  bit<32> hop_latency;
-}
-
-header int_q_occupancy_t {
-  bit<8> q_id;
-  bit<24> q_occupancy;
-}
-
-header int_ingress_tstamp_t {
-  bit<64> ingress_tstamp;
-}
-
-header int_egress_tstamp_t {
-  bit<64> egress_tstamp;
-}
-
-header int_level2_port_ids_t {
-  bit<32> ingress_port_id;
-  bit<32> egress_port_id;
-}
-
-header int_egress_port_tx_util_t {
-  bit<32> egress_port_tx_util;
-}
-
-header int_buffer_t {
-  bit<8> buffer_id;
-  bit<24> buffer_occupancy;
+struct metadata {
+  bit<8> counter;             // Counter for stack elements
+  bit<8>  stack_size;          // Size of the INT stack
 }
 
 struct headers {
@@ -133,16 +99,5 @@ struct headers {
 
   int_header_t                int_header;
   intl4_shim_t                intl4_shim;
-  int_switch_id_t             int_switch_id;
-  int_level1_port_ids_t       int_level1_port_ids;
-  int_hop_latency_t           int_hop_latency;
-  int_q_occupancy_t           int_q_occupancy;
-  int_ingress_tstamp_t        int_ingress_tstamp;
-  int_egress_tstamp_t         int_egress_tstamp;
-  int_level2_port_ids_t       int_level2_port_ids;
-  int_egress_port_tx_util_t   int_egress_tx_util;
-}
-
-struct metadata {
-  /* empty */
+  stack_element_t[2]          int_stack;
 }
