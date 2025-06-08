@@ -1,0 +1,26 @@
+name: Compile P4 Program
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+
+jobs:
+  docker-p4c:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Build the p4c Docker image
+        run: |
+          git clone --recursive https://github.com/p4lang/p4c.git
+          cd p4c
+          docker build -t p4c .
+
+      - name: Run p4c in Docker to compile P4 program
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace p4c \
+            p4c -b bmv2 program.p4 -o program.bmv2.json
