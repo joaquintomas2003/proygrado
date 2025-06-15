@@ -212,6 +212,7 @@ control MyDeparser(packet_out packet, in headers hdr) {
     packet.emit(hdr.udp);
     packet.emit(hdr.intl4_shim);
     packet.emit(hdr.int_header);
+    packet.emit(hdr.int_stack);
   }
 }
 
