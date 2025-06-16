@@ -114,11 +114,11 @@ struct headers {
 
   int_header_t                int_header;
   intl4_shim_t                intl4_shim;
-  stack_element_t[11]          node1_metadata;
-  stack_element_t[11]          node2_metadata;
-  stack_element_t[11]          node3_metadata;
-  stack_element_t[11]          node4_metadata;
-  stack_element_t[11]          node5_metadata;
+  stack_element_t[12]          node1_metadata;
+  stack_element_t[12]          node2_metadata;
+  stack_element_t[12]          node3_metadata;
+  stack_element_t[12]          node4_metadata;
+  stack_element_t[12]          node5_metadata;
 }
 
 /*************************************************************************
