@@ -102,7 +102,11 @@ struct headers {
 
   int_header_t                int_header;
   intl4_shim_t                intl4_shim;
-  stack_element_t[2]          int_stack;
+  stack_element_t[11]          node_1;
+  stack_element_t[11]          node_2;
+  stack_element_t[11]          node_3;
+  stack_element_t[11]          node_4;
+  stack_element_t[11]          node_5;
 }
 
 /*************************************************************************
@@ -144,27 +148,61 @@ parser MyParser(packet_in packet,
 
   state parse_shim {
     packet.extract(hdr.intl4_shim);
-    meta.stack_size = hdr.intl4_shim.len - 3; // 3-4 bytes for int header
+    meta.stack_size = hdr.intl4_shim.len - 3;
     transition parse_int_hdr;
   }
 
   state parse_int_hdr {
     packet.extract(hdr.int_header);
     meta.counter = 0;
-    transition parse_stack;
-  }
-
-  state parse_stack {
-    transition select(meta.counter < meta.stack_size) {
-      true: parse_stack_element;
-      false: accept;
+    meta.nodes = 5 - hdr.int_header.remaining_hop_cnt;
+    meta.node_length = 0;
+    transition select(meta.nodes){
+      1: parse_one_node;
+      2: parse_two_nodes;
+      3: parse_three_nodes;
+      4: parse_four_nodes;
+      5: parse_five_nodes;
     }
   }
 
-  state parse_stack_element {
-    packet.extract(hdr.int_stack.next);
-    meta.counter = meta.counter + 1;
-    transition parse_stack;
+  state parse_node_one{
+    packet.extract(hdr.node1.next);
+    meta.node_length = meta.node_length + 1;
+    transition parse_one_node;
+  }
+
+  state parse_one_node {
+    transition select(meta.node_length < hdr.int_header.hop_metadata_len){
+      false: accept;
+      true: parse_node_one;
+    }
+  }
+
+  state parse_node_two{
+    packet.extract(hdr.node2.next);
+    meta.node_length = meta.node_length + 1;
+    transition parse_two_nodes;
+  }
+
+  state parse_two_nodes {
+    transition select(meta.node_length < hdr.int_header.hop_metadata_len){
+      false: parse_one_node;
+      true: parse_node_two;
+    }
+  }
+
+  state parse_node_three{
+    packet.extract(hdr.node2.next);
+    meta.node_length = meta.node_length + 1;
+    transition parse_two_nodes;
+  }
+
+  state parse_two_nodes {
+    transition select(meta.node_length < hdr.int_header.hop_metadata_len){
+      false: parse_one_node;
+      true: parse_node_two;
+    }
   }
 }
 
@@ -212,7 +250,11 @@ control MyDeparser(packet_out packet, in headers hdr) {
     packet.emit(hdr.udp);
     packet.emit(hdr.intl4_shim);
     packet.emit(hdr.int_header);
-    packet.emit(hdr.int_stack);
+    packet.emit(hdr.node_1);
+    packet.emit(hdr.node_2);
+    packet.emit(hdr.node_3);
+    packet.emit(hdr.node_4);
+    packet.emit(hdr.node_5);
   }
 }
 
