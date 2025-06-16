@@ -92,6 +92,9 @@ header stack_element_t {
 struct metadata {
   bit<8> counter;             // Counter for stack elements
   bit<8>  stack_size;          // Size of the INT stack
+
+  bit<32> register_index;
+  bit<32> register_index_inverse;
 }
 
 struct headers {
@@ -265,6 +268,66 @@ control MyDeparser(packet_out packet, in headers hdr) {
 control MyIngress(inout headers hdr,
     inout metadata meta,
     inout standard_metadata_t standard_metadata) {
+
+  action get_register_index_tcp() {
+    hash(meta.register_index,
+          HashAlgorithm.crc16,
+          (bit<16>)0,
+          {
+            hdr.ipv4.srcAddr,
+            hdr.ipv4.dstAddr,
+            hdr.tcp.srcPort,
+            hdr.tcp.dstPort,
+            hdr.ipv4.protocol
+          },
+          (bit<32>)MAX_REGISTER_ENTRIES
+        );
+  }
+
+  action get_register_index_udp() {
+    hash(meta.register_index,
+          HashAlgorithm.crc16,
+          (bit<16>)0,
+          {
+            hdr.ipv4.srcAddr,
+            hdr.ipv4.dstAddr,
+            hdr.udp.srcPort,
+            hdr.udp.dstPort,
+            hdr.ipv4.protocol
+          },
+          (bit<32>)MAX_REGISTER_ENTRIES
+        );
+  }
+
+  action get_register_index_inverse_tcp() {
+    hash(meta.register_index_inverse,
+          HashAlgorithm.crc16,
+          (bit<16>)0,
+          {
+            hdr.ipv4.dstAddr,
+            hdr.ipv4.srcAddr,
+            hdr.tcp.dstPort,
+            hdr.tcp.srcPort,
+            hdr.ipv4.protocol
+          },
+          (bit<32>)MAX_REGISTER_ENTRIES
+        );
+  }
+
+  action get_register_index_inverse_udp() {
+    hash(meta.register_index_inverse,
+          HashAlgorithm.crc16,
+          (bit<16>)0,
+          {
+            hdr.ipv4.dstAddr,
+            hdr.ipv4.srcAddr,
+            hdr.udp.dstPort,
+            hdr.udp.srcPort,
+            hdr.ipv4.protocol
+          },
+          (bit<32>)MAX_REGISTER_ENTRIES
+        );
+  }
 
   action drop() { }
 
