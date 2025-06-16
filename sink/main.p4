@@ -125,7 +125,7 @@ parser MyParser(packet_in packet,
   state parse_ethernet {
     packet.extract(hdr.ethernet);
     transition select(hdr.ethernet.type) {
-      TYPE_IPV4: parse_ipv4;
+TYPE_IPV4: parse_ipv4;
       default: accept;
     }
   }
@@ -133,7 +133,7 @@ parser MyParser(packet_in packet,
   state parse_ipv4 {
     packet.extract(hdr.ipv4);
     transition select(hdr.ipv4.protocol) {
-      IP_PROTO_UDP: parse_udp;
+IP_PROTO_UDP: parse_udp;
       default: accept;
     }
   }
@@ -141,7 +141,7 @@ parser MyParser(packet_in packet,
   state parse_udp {
     packet.extract(hdr.udp);
     transition select(hdr.udp.dst_port) {
-      5000: parse_shim;
+5000: parse_shim;
       default:  accept;
     }
   }
@@ -158,11 +158,11 @@ parser MyParser(packet_in packet,
     meta.nodes = 5 - hdr.int_header.remaining_hop_cnt;
     meta.node_length = 0;
     transition select(meta.nodes){
-      1: parse_one_node;
-      2: parse_two_nodes;
-      3: parse_three_nodes;
-      4: parse_four_nodes;
-      5: parse_five_nodes;
+1: parse_one_node;
+2: parse_two_nodes;
+3: parse_three_nodes;
+4: parse_four_nodes;
+5: parse_five_nodes;
     }
   }
 
@@ -174,8 +174,8 @@ parser MyParser(packet_in packet,
 
   state parse_one_node {
     transition select(meta.node_length < hdr.int_header.hop_metadata_len){
-      false: accept;
-      true: parse_node_one;
+false: accept;
+true: parse_node_one;
     }
   }
 
@@ -187,8 +187,8 @@ parser MyParser(packet_in packet,
 
   state parse_two_nodes {
     transition select(meta.node_length < hdr.int_header.hop_metadata_len){
-      false: parse_one_node;
-      true: parse_node_two;
+false: parse_one_node;
+true: parse_node_two;
     }
   }
 
@@ -200,8 +200,8 @@ parser MyParser(packet_in packet,
 
   state parse_two_nodes {
     transition select(meta.node_length < hdr.int_header.hop_metadata_len){
-      false: parse_one_node;
-      true: parse_node_two;
+false: parse_one_node;
+true: parse_node_two;
     }
   }
 }
@@ -221,21 +221,21 @@ control MyVerifyChecksum(inout headers hdr, inout metadata meta) {
 control MyComputeChecksum(inout headers  hdr, inout metadata meta) {
   apply {
     update_checksum(
-      hdr.ipv4.isValid(),
-      { hdr.ipv4.version,
-      hdr.ipv4.ihl,
-      hdr.ipv4.dscp,
-      hdr.ipv4.ecn,
-      hdr.ipv4.total_len,
-      hdr.ipv4.identification,
-      hdr.ipv4.flags,
-      hdr.ipv4.frag_offset,
-      hdr.ipv4.ttl,
-      hdr.ipv4.protocol,
-      hdr.ipv4.src_addr,
-      hdr.ipv4.dst_addr },
-      hdr.ipv4.hdr_checksum,
-      HashAlgorithm.csum16);
+        hdr.ipv4.isValid(),
+        { hdr.ipv4.version,
+        hdr.ipv4.ihl,
+        hdr.ipv4.dscp,
+        hdr.ipv4.ecn,
+        hdr.ipv4.total_len,
+        hdr.ipv4.identification,
+        hdr.ipv4.flags,
+        hdr.ipv4.frag_offset,
+        hdr.ipv4.ttl,
+        hdr.ipv4.protocol,
+        hdr.ipv4.src_addr,
+        hdr.ipv4.dst_addr },
+        hdr.ipv4.hdr_checksum,
+        HashAlgorithm.csum16);
   }
 }
 
@@ -310,11 +310,11 @@ control MyEgress(inout headers hdr,
  ***********************  S W I T C H  *******************************
  *************************************************************************/
 
-V1Switch(
-  MyParser(),
-  MyVerifyChecksum(),
-  MyIngress(),
-  MyEgress(),
-  MyComputeChecksum(),
-  MyDeparser()
-) main;
+  V1Switch(
+      MyParser(),
+      MyVerifyChecksum(),
+      MyIngress(),
+      MyEgress(),
+      MyComputeChecksum(),
+      MyDeparser()
+      ) main;
