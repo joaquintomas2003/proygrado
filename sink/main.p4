@@ -69,8 +69,8 @@ header intl4_shim_t {
   bit<2> npt;                     // Next protocol type
   bit<2> rsvd;                    // Reserved
   bit<8> len;                     // Length of INT Metadata header and INT stack in 4-byte words, not including the shim header (1 word)
-  bit<6> udp_ip_dscp;            // depends on npt field. either original dscp, ip protocol or udp dest port
-  bit<10> udp_ip;                // depends on npt field. either original dscp, ip protocol or udp dest port
+  bit<8> first_word_of_udp_port;  // First word of the UDP port used when NPT = 1
+  bit<8> reserved;                // Second word of the UDP port used when NPT = 1 or the original protocol type when NPT = 2
 }
 
 header int_header_t {
@@ -198,7 +198,7 @@ parser MyParser(packet_in packet,
 
   state parse_node1_after {
     transition select(meta.nodes_present){
-      1: accept;
+      1: check_npt;
       default: parse_node2_entry;
     }
   }
@@ -219,7 +219,7 @@ parser MyParser(packet_in packet,
 
   state parse_node2_after {
     transition select(meta.nodes_present){
-      2: accept;
+      2: check_npt;
       default: parse_node3_entry;
     }
   }
@@ -240,7 +240,7 @@ parser MyParser(packet_in packet,
 
   state parse_node3_after {
     transition select(meta.nodes_present){
-      3: accept;
+      3: check_npt;
       default: parse_node4_entry;
     }
   }
@@ -261,7 +261,7 @@ parser MyParser(packet_in packet,
 
   state parse_node4_after {
     transition select(meta.nodes_present){
-      4: accept;
+      4: check_npt;
       default: parse_node5_entry;
     }
   }
@@ -276,8 +276,27 @@ parser MyParser(packet_in packet,
   state parse_node5_loop {
     transition select(meta.node5_entries < hdr.int_header.hop_metadata_len) {
       true  : parse_node5_entry;
-      false : accept;
+      false : check_npt;
     }
+  }
+
+  state check_npt {
+    transition select(hdr.intl4_shim.npt) {
+      2: check_protocol;
+      default: accept;
+    }
+  }
+
+  state check_protocol {
+    transition select(hdr.intl4_shim.reserved) {
+      IP_PROTO_TCP: parse_tcp;
+      default: accept;
+    }
+  }
+
+  state parse_tcp {
+    packet.extract(hdr.tcp);
+    transition accept;
   }
 }
 
@@ -323,6 +342,7 @@ control MyDeparser(packet_out packet, in headers hdr) {
     packet.emit(hdr.ethernet);
     packet.emit(hdr.ipv4);
     packet.emit(hdr.udp);
+    packet.emit(hdr.tcp);
     packet.emit(hdr.intl4_shim);
     packet.emit(hdr.int_header);
     packet.emit(hdr.node1_metadata);
