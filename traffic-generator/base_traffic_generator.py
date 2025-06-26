@@ -40,8 +40,11 @@ def build_int_md_header():
     domain_id = 0x0000
     part2 = struct.pack("!HH", instruction_bitmap, domain_id)
 
-    ds_instruction = 0x00000000
-    return header_part1 + part2 + struct.pack("!I", ds_instruction)
+    ds_instruction = 0x0000
+    ds_flags = 0x0000
+    part3= struct.pack("!HH", ds_instruction, ds_flags)
+
+    return header_part1 + part2 + part3
 
 def build_metadata_stack():
     hops = [
