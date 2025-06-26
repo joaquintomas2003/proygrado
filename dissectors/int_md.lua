@@ -1,10 +1,17 @@
 int_md = Proto("INT-MD", "INT-MD before TCP with new UDP header")
 
-shim_type_and_npt = ProtoField.uint8("int-md.shim_type_and_npt", "Shim Type and NPT", base.HEX)
+-- INT Shim Header
+-- byte 0
+shim_type = ProtoField.uint8("int-md.shim_type", "Shim Type", base.HEX, nil, 0xF0)
+shim_npt = ProtoField.uint8("int-md.shim_npt", "Shim NPT", base.HEX, nil, 0x0C)
+
+-- byte 1
 shim_length = ProtoField.uint8("int-md.shim_length", "Shim Length", base.HEX)
+
+-- byte 2 and 3
 shim_proto = ProtoField.uint16("int-md.shim_proto", "Shim IP Proto", base.HEX)
 
-int_md.fields = { shim_type_and_npt, shim_length, shim_proto }
+int_md.fields = { shim_type, shim_npt, shim_length, shim_proto }
 
 function int_md.dissector(buffer, pinfo, tree)
   length = buffer:len()
@@ -17,7 +24,9 @@ function int_md.dissector(buffer, pinfo, tree)
   local offset = 0
 
   -- shim
-  subtree:add(shim_type_and_npt, buffer(offset, 1))
+  local shim_buf = buffer(offset, 1)
+  subtree:add(shim_type, shim_buf)
+  subtree:add(shim_npt, shim_buf)
   offset = offset + 1
 
   subtree:add(shim_length, buffer(offset, 1))
