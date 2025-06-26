@@ -32,9 +32,19 @@ rhc = ProtoField.uint8("int-md.rhc", "Remaining Hop Count", base.DEC) -- whole b
 -- bytes 4-5
 instruction_bitmap = ProtoField.uint16("int-md.instruction_bitmap", "Instruction Bitmap", base.HEX)
 
+-- bytes 6-7
+domain_specific_id = ProtoField.uint16("int-md.domain_specific_id", "Domain Specific Id", base.HEX)
+
+-- bytes 8-9
+ds_instruction = ProtoField.uint16("int-md.ds_instruction", "DS Instruction", base.HEX)
+
+-- bytes 10-11
+ds_flags = ProtoField.uint16("int-md.ds_flags", "DS Flags", base.HEX)
+
 int_md.fields = { shim_type, shim_npt, shim_length, shim_proto,
                   ver, d, e, m, hop_ml, rhc,
-                  instruction_bitmap,
+                  instruction_bitmap, domain_specific_id,
+                  ds_instruction, ds_flags
                 }
 
 function int_md.dissector(buffer, pinfo, tree)
@@ -97,6 +107,15 @@ function int_md.dissector(buffer, pinfo, tree)
       bitmap_tree:add(string.format("Bit %d: %s", i, label))
     end
   end
+  offset = offset + 2
+
+  subtree:add(domain_specific_id, buffer(offset, 2))
+  offset = offset + 2
+
+  subtree:add(ds_instruction, buffer(offset, 2))
+  offset = offset + 2
+
+  subtree:add(ds_flags, buffer(offset, 2))
   offset = offset + 2
 end
 
