@@ -29,8 +29,13 @@ hop_ml = ProtoField.uint8("int-md.hop_ml", "Per-hop Metadata Length", base.DEC, 
 -- byte 3
 rhc = ProtoField.uint8("int-md.rhc", "Remaining Hop Count", base.DEC) -- whole byte
 
+-- bytes 4-5
+instruction_bitmap = ProtoField.uint16("int-md.instruction_bitmap", "Instruction Bitmap", base.HEX)
+
 int_md.fields = { shim_type, shim_npt, shim_length, shim_proto,
-                  ver, d, e, m, hop_ml, rhc }
+                  ver, d, e, m, hop_ml, rhc,
+                  instruction_bitmap,
+                }
 
 function int_md.dissector(buffer, pinfo, tree)
   length = buffer:len()
@@ -70,6 +75,29 @@ function int_md.dissector(buffer, pinfo, tree)
 
   subtree:add(rhc, buffer(offset, 1))
   offset = offset + 1
+
+  local instruction_bitmap = buffer(offset, 2):uint()
+  local instruction_fields = {
+    [0] = "Node ID",
+    [1] = "L1 Ingress + Egress Interface IDs",
+    [2] = "Hop latency",
+    [3] = "Queue ID + Queue occupancy",
+    [4] = "Ingress timestamp",
+    [5] = "Egress timestamp",
+    [6] = "L2 Ingress + Egress Interface IDs",
+    [7] = "Egress interface Tx utilization",
+    [8] = "Buffer ID + Buffer occupancy",
+    [15] = "Checksum Complement"
+  }
+  local bitmap_tree = subtree:add("Instruction Bitmap Set Bits:")
+  for i = 0, 15 do
+    local mask = bit.lshift(1, 15 - i)  -- bit 0 is MSB
+    if bit.band(instruction_bitmap, mask) ~= 0 then
+      local label = instruction_fields[i] or ("Reserved bit " .. i)
+      bitmap_tree:add(string.format("Bit %d: %s", i, label))
+    end
+  end
+  offset = offset + 2
 end
 
 local udp_port = DissectorTable.get("udp.port")
