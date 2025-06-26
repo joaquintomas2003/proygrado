@@ -2,14 +2,14 @@ int_md = Proto("INT-MD", "INT-MD before TCP with new UDP header")
 
 -- INT Shim Header
 -- byte 0
-shim_type = ProtoField.uint8("int-md.shim_type", "Shim Type", base.HEX, nil, 0xF0)
-shim_npt = ProtoField.uint8("int-md.shim_npt", "Shim NPT", base.HEX, nil, 0x0C)
+shim_type = ProtoField.uint8("int-md.shim_type", "Shim Type", base.DEC, nil, 0xF0) -- bits 7-4
+shim_npt = ProtoField.uint8("int-md.shim_npt", "Shim NPT", base.DEC, nil, 0x0C) -- bits 3-2
 
 -- byte 1
-shim_length = ProtoField.uint8("int-md.shim_length", "Shim Length", base.HEX)
+shim_length = ProtoField.uint8("int-md.shim_length", "Shim Length", base.DEC)
 
 -- byte 2 and 3
-shim_proto = ProtoField.uint16("int-md.shim_proto", "Shim IP Proto", base.HEX)
+shim_proto = ProtoField.uint16("int-md.shim_proto", "Shim IP Proto", base.DEC)
 
 int_md.fields = { shim_type, shim_npt, shim_length, shim_proto }
 
