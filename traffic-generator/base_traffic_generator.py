@@ -19,7 +19,7 @@ INT_TYPE = 1              # 1 = INT-MD
 NPT_L4 = 2                # indicates that another (the original) L4 header follows the INT stack
 HOP_METADATA_LEN = 2      # 2 * 4B = 8 bytes per hop
 REMAINING_HOPS = 1
-INSTRUCTION_BITMAP = 0b00000000000000000000000000000101  # Node ID + Hop Latency (bit 0 + bit 2)
+INSTRUCTION_BITMAP = 0b1010000000000000  # Node ID + Hop Latency (bit 0 + bit 2 where bit 0 is MSB)
 
 
 def build_int_shim():
@@ -38,7 +38,7 @@ def build_int_md_header():
 
     instruction_bitmap = INSTRUCTION_BITMAP
     domain_id = 0x0000
-    part2 = struct.pack("!II", instruction_bitmap, domain_id)
+    part2 = struct.pack("!HH", instruction_bitmap, domain_id)
 
     ds_instruction = 0x00000000
     return header_part1 + part2 + struct.pack("!I", ds_instruction)
