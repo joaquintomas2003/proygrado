@@ -91,9 +91,43 @@ header stack_element_t {
   bit<32> data;
 }
 
+struct bitmap_t {
+  bit<1> node_id; // Bit 0
+  bit<1> level1_interfaces; // Bit 1
+  bit<1> hop_latency; // Bit 2
+  bit<1> queue_occupancy; // Bit 3
+  bit<1> ingress_timestamp; // Bit 4
+  bit<1> egress_timestamp; // Bit 5
+  bit<1> level2_interfaces; // Bit 6
+  bit<1> egress_interface_tx; // Bit 7
+  bit<1> buffer_occupancy; // Bit 8
+}
+
+struct node_metadata_t {
+  bit<32> node_id;
+  bit<16> level1_ingress_interface_id;
+  bit<16> level1_egress_interface_id;
+  bit<32> hop_latency;
+  bit<8> queue_id;
+  bit<24> queue_occupancy;
+  bit<64> ingress_timestamp;
+  bit<64> egress_timestamp;
+  bit<16> level2_ingress_interface_id;
+  bit<16> level2_egress_interface_id;
+  bit<32> egress_interface_tx;
+  bit<8> buffer_id;
+  bit<24> buffer_occupancy;
+}
+
 struct metadata {
   bit<8> counter;             // Counter for stack elements
   bit<8>  stack_size;          // Size of the INT stack
+  bitmap_t bitmap; // Bitmap indicating which metadata is present
+  node_metadata_t node1_metadata;
+  node_metadata_t node2_metadata;
+  node_metadata_t node3_metadata;
+  node_metadata_t node4_metadata;
+  node_metadata_t node5_metadata;
 
   /* Number of node metadata blocks present in this packet */
   bit<8> nodes_present;
@@ -114,11 +148,11 @@ struct headers {
 
   int_header_t                int_header;
   intl4_shim_t                intl4_shim;
-  stack_element_t[12]          node1_metadata;
-  stack_element_t[12]          node2_metadata;
-  stack_element_t[12]          node3_metadata;
-  stack_element_t[12]          node4_metadata;
-  stack_element_t[12]          node5_metadata;
+  stack_element_t[12]          node1_raw_data;
+  stack_element_t[12]          node2_raw_data;
+  stack_element_t[12]          node3_raw_data;
+  stack_element_t[12]          node4_raw_data;
+  stack_element_t[12]          node5_raw_data;
 }
 
 /*************************************************************************
@@ -184,7 +218,7 @@ parser MyParser(packet_in packet,
 
   /* ---------- Node 1 ---------- */
   state parse_node1_entry {
-    packet.extract(hdr.node1_metadata.next);
+    packet.extract(hdr.node1_raw_data.next);
     meta.node1_entries = meta.node1_entries + ENTRY_LEN;
     transition parse_node1_loop;
   }
@@ -205,7 +239,7 @@ parser MyParser(packet_in packet,
 
   /* ---------- Node 2 ---------- */
   state parse_node2_entry {
-    packet.extract(hdr.node2_metadata.next);
+    packet.extract(hdr.node2_raw_data.next);
     meta.node2_entries = meta.node2_entries + ENTRY_LEN;
     transition parse_node2_loop;
   }
@@ -226,7 +260,7 @@ parser MyParser(packet_in packet,
 
   /* ---------- Node 3 ---------- */
   state parse_node3_entry {
-    packet.extract(hdr.node3_metadata.next);
+    packet.extract(hdr.node3_raw_data.next);
     meta.node3_entries = meta.node3_entries + ENTRY_LEN;
     transition parse_node3_loop;
   }
@@ -247,7 +281,7 @@ parser MyParser(packet_in packet,
 
   /* ---------- Node 4 ---------- */
   state parse_node4_entry {
-    packet.extract(hdr.node4_metadata.next);
+    packet.extract(hdr.node4_raw_data.next);
     meta.node4_entries = meta.node4_entries + ENTRY_LEN;
     transition parse_node4_loop;
   }
@@ -268,7 +302,7 @@ parser MyParser(packet_in packet,
 
   /* ---------- Node 5 ---------- */
   state parse_node5_entry {
-    packet.extract(hdr.node5_metadata.next);
+    packet.extract(hdr.node5_raw_data.next);
     meta.node5_entries = meta.node5_entries + ENTRY_LEN;
     transition parse_node5_loop;
   }
@@ -345,11 +379,11 @@ control MyDeparser(packet_out packet, in headers hdr) {
     packet.emit(hdr.tcp);
     packet.emit(hdr.intl4_shim);
     packet.emit(hdr.int_header);
-    packet.emit(hdr.node1_metadata);
-    packet.emit(hdr.node2_metadata);
-    packet.emit(hdr.node3_metadata);
-    packet.emit(hdr.node4_metadata);
-    packet.emit(hdr.node5_metadata);
+    packet.emit(hdr.node1_raw_data);
+    packet.emit(hdr.node2_raw_data);
+    packet.emit(hdr.node3_raw_data);
+    packet.emit(hdr.node4_raw_data);
+    packet.emit(hdr.node5_raw_data);
   }
 }
 
@@ -371,6 +405,158 @@ control MyIngress(inout headers hdr,
     }
   }
 
+  action pop_from_stacks() {
+    hdr.node1_raw_data.pop_front(1);
+    hdr.node2_raw_data.pop_front(1);
+    hdr.node3_raw_data.pop_front(1);
+    hdr.node4_raw_data.pop_front(1);
+    hdr.node5_raw_data.pop_front(1);
+  }
+
+  action populate_requested_metadata() {
+    meta.bitmap.node_id = (bit<1>) hdr.int_header.instruction & 0x1;
+    meta.bitmap.level1_interfaces = (bit<1>) (hdr.int_header.instruction >> 1) & 0x1;
+    meta.bitmap.hop_latency = (bit<1>) (hdr.int_header.instruction >> 2) & 0x1;
+    meta.bitmap.queue_occupancy = (bit<1>) (hdr.int_header.instruction >> 3) & 0x1;
+    meta.bitmap.ingress_timestamp = (bit<1>) (hdr.int_header.instruction >> 4) & 0x1;
+    meta.bitmap.egress_timestamp = (bit<1>) (hdr.int_header.instruction >> 5) & 0x1;
+    meta.bitmap.level2_interfaces = (bit<1>) (hdr.int_header.instruction >> 6) & 0x1;
+    meta.bitmap.egress_interface_tx = (bit<1>) (hdr.int_header.instruction >> 7) & 0x1;
+    meta.bitmap.buffer_occupancy = (bit<1>) (hdr.int_header.instruction >> 8) & 0x1;
+  }
+
+  action populate_node_id_metadata() {
+    if (meta.nodes_present > 0) meta.node1_metadata.node_id = hdr.node1_raw_data[0].data;
+    if (meta.nodes_present > 1) meta.node2_metadata.node_id = hdr.node2_raw_data[0].data;
+    if (meta.nodes_present > 2) meta.node3_metadata.node_id = hdr.node3_raw_data[0].data;
+    if (meta.nodes_present > 3) meta.node4_metadata.node_id = hdr.node4_raw_data[0].data;
+    if (meta.nodes_present > 4) meta.node5_metadata.node_id = hdr.node5_raw_data[0].data;
+  }
+
+  action populate_level1_interfaces_metadata() {
+    if (meta.nodes_present > 0) {
+      meta.node1_metadata.level1_ingress_interface_id = (bit<16>) hdr.node1_raw_data[0].data;
+      meta.node1_metadata.level1_egress_interface_id = (bit<16>) (hdr.node1_raw_data[0].data >> 16);
+    }
+    if (meta.nodes_present > 1) {
+      meta.node2_metadata.level1_ingress_interface_id = (bit<16>) hdr.node2_raw_data[0].data;
+      meta.node2_metadata.level1_egress_interface_id = (bit<16>) (hdr.node2_raw_data[0].data >> 16);
+    }
+    if (meta.nodes_present > 2) {
+      meta.node3_metadata.level1_ingress_interface_id = (bit<16>) hdr.node3_raw_data[0].data;
+      meta.node3_metadata.level1_egress_interface_id = (bit<16>) (hdr.node3_raw_data[0].data >> 16);
+    }
+    if (meta.nodes_present > 3) {
+      meta.node4_metadata.level1_ingress_interface_id = (bit<16>) hdr.node4_raw_data[0].data;
+      meta.node4_metadata.level1_egress_interface_id = (bit<16>) (hdr.node4_raw_data[0].data >> 16);
+    }
+    if (meta.nodes_present > 4) {
+      meta.node5_metadata.level1_ingress_interface_id = (bit<16>) hdr.node5_raw_data[0].data;
+      meta.node5_metadata.level1_egress_interface_id = (bit<16>) (hdr.node5_raw_data[0].data >> 16);
+    }
+  }
+
+  action populate_hop_latency_metadata() {
+    if (meta.nodes_present > 0) meta.node1_metadata.hop_latency = hdr.node1_raw_data[0].data;
+    if (meta.nodes_present > 1) meta.node2_metadata.hop_latency = hdr.node2_raw_data[0].data;
+    if (meta.nodes_present > 2) meta.node3_metadata.hop_latency = hdr.node3_raw_data[0].data;
+    if (meta.nodes_present > 3) meta.node4_metadata.hop_latency = hdr.node4_raw_data[0].data;
+    if (meta.nodes_present > 4) meta.node5_metadata.hop_latency = hdr.node5_raw_data[0].data;
+  }
+
+  action populate_queue_occupancy_metadata() {
+    if (meta.nodes_present > 0) {
+      meta.node1_metadata.queue_id = (bit<8>) hdr.node1_raw_data[0].data;
+      meta.node1_metadata.queue_occupancy = (bit<24>) (hdr.node1_raw_data[0].data >> 8);
+    }
+    if (meta.nodes_present > 1) {
+      meta.node2_metadata.queue_id = (bit<8>) hdr.node2_raw_data[0].data;
+      meta.node2_metadata.queue_occupancy = (bit<24>) (hdr.node2_raw_data[0].data >> 8);
+    }
+    if (meta.nodes_present > 2) {
+      meta.node3_metadata.queue_id = (bit<8>) hdr.node3_raw_data[0].data;
+      meta.node3_metadata.queue_occupancy = (bit<24>) (hdr.node3_raw_data[0].data >> 8);
+    }
+    if (meta.nodes_present > 3) {
+      meta.node4_metadata.queue_id = (bit<8>) hdr.node4_raw_data[0].data;
+      meta.node4_metadata.queue_occupancy = (bit<24>) (hdr.node4_raw_data[0].data >> 8);
+    }
+    if (meta.nodes_present > 4) {
+      meta.node5_metadata.queue_id = (bit<8>) hdr.node5_raw_data[0].data;
+      meta.node5_metadata.queue_occupancy = (bit<24>) (hdr.node5_raw_data[0].data >> 8);
+    }
+  }
+
+  action populate_ingress_timestamp_metadata() {
+    if (meta.nodes_present > 0) meta.node1_metadata.ingress_timestamp = (bit<64>) hdr.node1_raw_data[0].data << 32 | (bit<64>) (hdr.node1_raw_data[1].data);
+    if (meta.nodes_present > 1) meta.node2_metadata.ingress_timestamp = (bit<64>) hdr.node2_raw_data[0].data << 32 | (bit<64>) (hdr.node2_raw_data[1].data);
+    if (meta.nodes_present > 2) meta.node3_metadata.ingress_timestamp = (bit<64>) hdr.node3_raw_data[0].data << 32 | (bit<64>) (hdr.node3_raw_data[1].data);
+    if (meta.nodes_present > 3) meta.node4_metadata.ingress_timestamp = (bit<64>) hdr.node4_raw_data[0].data << 32 | (bit<64>) (hdr.node4_raw_data[1].data);
+    if (meta.nodes_present > 4) meta.node5_metadata.ingress_timestamp = (bit<64>) hdr.node5_raw_data[0].data << 32 | (bit<64>) (hdr.node5_raw_data[1].data);
+  }
+
+  action populate_egress_timestamp_metadata() {
+    if (meta.nodes_present > 0) meta.node1_metadata.egress_timestamp = (bit<64>) hdr.node1_raw_data[0].data << 32 | (bit<64>) (hdr.node1_raw_data[1].data);
+    if (meta.nodes_present > 1) meta.node2_metadata.egress_timestamp = (bit<64>) hdr.node2_raw_data[0].data << 32 | (bit<64>) (hdr.node2_raw_data[1].data);
+    if (meta.nodes_present > 2) meta.node3_metadata.egress_timestamp = (bit<64>) hdr.node3_raw_data[0].data << 32 | (bit<64>) (hdr.node3_raw_data[1].data);
+    if (meta.nodes_present > 3) meta.node4_metadata.egress_timestamp = (bit<64>) hdr.node4_raw_data[0].data << 32 | (bit<64>) (hdr.node4_raw_data[1].data);
+    if (meta.nodes_present > 4) meta.node5_metadata.egress_timestamp = (bit<64>) hdr.node5_raw_data[0].data << 32 | (bit<64>) (hdr.node5_raw_data[1].data);
+  }
+
+  action populate_level2_interfaces_metadata() {
+    if (meta.nodes_present > 0) {
+      meta.node1_metadata.level2_ingress_interface_id = (bit<16>) hdr.node1_raw_data[0].data;
+      meta.node1_metadata.level2_egress_interface_id = (bit<16>) (hdr.node1_raw_data[0].data >> 16);
+    }
+    if (meta.nodes_present > 1) {
+      meta.node2_metadata.level2_ingress_interface_id = (bit<16>) hdr.node2_raw_data[0].data;
+      meta.node2_metadata.level2_egress_interface_id = (bit<16>) (hdr.node2_raw_data[0].data >> 16);
+    }
+    if (meta.nodes_present > 2) {
+      meta.node3_metadata.level2_ingress_interface_id = (bit<16>) hdr.node3_raw_data[0].data;
+      meta.node3_metadata.level2_egress_interface_id = (bit<16>) (hdr.node3_raw_data[0].data >> 16);
+    }
+    if (meta.nodes_present > 3) {
+      meta.node4_metadata.level2_ingress_interface_id = (bit<16>) hdr.node4_raw_data[0].data;
+      meta.node4_metadata.level2_egress_interface_id = (bit<16>) (hdr.node4_raw_data[0].data >> 16);
+    }
+    if (meta.nodes_present > 4) {
+      meta.node5_metadata.level2_ingress_interface_id = (bit<16>) hdr.node5_raw_data[0].data;
+      meta.node5_metadata.level2_egress_interface_id = (bit<16>) (hdr.node5_raw_data[0].data >> 16);
+    }
+  }
+
+  action populate_egress_interface_tx_metadata() {
+    if (meta.nodes_present > 0) meta.node1_metadata.egress_interface_tx = (bit<32>) hdr.node1_raw_data[0].data;
+    if (meta.nodes_present > 1) meta.node2_metadata.egress_interface_tx = (bit<32>) hdr.node2_raw_data[0].data;
+    if (meta.nodes_present > 2) meta.node3_metadata.egress_interface_tx = (bit<32>) hdr.node3_raw_data[0].data;
+    if (meta.nodes_present > 3) meta.node4_metadata.egress_interface_tx = (bit<32>) hdr.node4_raw_data[0].data;
+    if (meta.nodes_present > 4) meta.node5_metadata.egress_interface_tx = (bit<32>) hdr.node5_raw_data[0].data;
+  }
+
+  action populate_buffer_occupancy_metadata() {
+    if (meta.nodes_present > 0) {
+      meta.node1_metadata.buffer_id = (bit<8>) hdr.node1_raw_data[0].data;
+      meta.node1_metadata.buffer_occupancy = (bit<24>) (hdr.node1_raw_data[0].data >> 8);
+    }
+    if (meta.nodes_present > 1) {
+      meta.node2_metadata.buffer_id = (bit<8>) hdr.node2_raw_data[0].data;
+      meta.node2_metadata.buffer_occupancy = (bit<24>) (hdr.node2_raw_data[0].data >> 8);
+    }
+    if (meta.nodes_present > 2) {
+      meta.node3_metadata.buffer_id = (bit<8>) hdr.node3_raw_data[0].data;
+      meta.node3_metadata.buffer_occupancy = (bit<24>) (hdr.node3_raw_data[0].data >> 8);
+    }
+    if (meta.nodes_present > 3) {
+      meta.node4_metadata.buffer_id = (bit<8>) hdr.node4_raw_data[0].data;
+      meta.node4_metadata.buffer_occupancy = (bit<24>) (hdr.node4_raw_data[0].data >> 8);
+    }
+    if (meta.nodes_present > 4) {
+      meta.node5_metadata.buffer_id = (bit<8>) hdr.node5_raw_data[0].data;
+      meta.node5_metadata.buffer_occupancy = (bit<24>) (hdr.node5_raw_data[0].data >> 8);
+    }
+  }
+
   table ipv4_lpm {
     key = {
       hdr.ipv4.dst_addr: lpm;
@@ -386,6 +572,46 @@ control MyIngress(inout headers hdr,
 
   apply {
     if (hdr.ipv4.isValid()) {
+      populate_requested_metadata();
+
+      if (meta.bitmap.node_id == 1) {
+        populate_node_id_metadata();
+        pop_from_stacks();
+      }
+      if (meta.bitmap.level1_interfaces == 1) {
+        populate_level1_interfaces_metadata();
+        pop_from_stacks();
+      }
+      if (meta.bitmap.hop_latency == 1) {
+        populate_hop_latency_metadata();
+        pop_from_stacks();
+      }
+      if (meta.bitmap.queue_occupancy == 1) {
+        populate_queue_occupancy_metadata();
+        pop_from_stacks();
+      }
+      if (meta.bitmap.ingress_timestamp == 1) {
+        populate_ingress_timestamp_metadata();
+        pop_from_stacks();
+        pop_from_stacks();
+      }
+      if (meta.bitmap.egress_timestamp == 1) {
+        populate_egress_timestamp_metadata();
+        pop_from_stacks();
+        pop_from_stacks();
+      }
+      if (meta.bitmap.level2_interfaces == 1) {
+        populate_level2_interfaces_metadata();
+        pop_from_stacks();
+      }
+      if (meta.bitmap.egress_interface_tx == 1) {
+        populate_egress_interface_tx_metadata();
+        pop_from_stacks();
+      }
+      if (meta.bitmap.buffer_occupancy == 1) {
+        populate_buffer_occupancy_metadata();
+      }
+
       ipv4_lpm.apply();
     }
   }
@@ -405,11 +631,11 @@ control MyEgress(inout headers hdr,
  ***********************  S W I T C H  *******************************
  *************************************************************************/
 
-V1Switch(
-  MyParser(),
-  MyVerifyChecksum(),
-  MyIngress(),
-  MyEgress(),
-  MyComputeChecksum(),
-  MyDeparser()
-) main;
+  V1Switch(
+    MyParser(),
+    MyVerifyChecksum(),
+    MyIngress(),
+    MyEgress(),
+    MyComputeChecksum(),
+    MyDeparser()
+    ) main;
