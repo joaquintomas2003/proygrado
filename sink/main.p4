@@ -91,9 +91,22 @@ header stack_element_t {
   bit<32> data;
 }
 
+struct bitmap_t {
+  bit<1> node_id; // Bit 0
+  bit<1> level1_interfaces; // Bit 1
+  bit<1> hop_latency; // Bit 2
+  bit<1> queue_occupancy; // Bit 3
+  bit<1> ingress_timestamp; // Bit 4
+  bit<1> egress_timestamp; // Bit 5
+  bit<1> level2_interfaces; // Bit 6
+  bit<1> egress_interface_tx; // Bit 7
+  bit<1> buffer_occupancy; // Bit 8
+}
+
 struct metadata {
   bit<8> counter;             // Counter for stack elements
   bit<8>  stack_size;          // Size of the INT stack
+  bitmap_t bitmap; // Bitmap indicating which metadata is present
 
   /* Number of node metadata blocks present in this packet */
   bit<8> nodes_present;
