@@ -15,7 +15,17 @@
 #define IP_PROTO_TCP = 0x6;
 
 typedef struct int_metric_sample {
-  uint32_t data[12];
+  uint32_t node_id; /* Node ID */
+  uint16_t ingress_interface_id; /* Level 1 ingress interface ID */
+  uint16_t egress_interface_id; /* Level 1 egress interface ID */
+  uint32_t hop_latency; /* Hop latency */
+  uint32_t queue_occupancy; /* Queue occupancy */
+  uint64_t ingress_timestamp; /* Ingress timestamp */
+  uint64_t egress_timestamp; /* Egress timestamp */
+  uint16_t level2_ingress_interface_id; /* Level 2 ingress interface ID */
+  uint16_t level2_egress_interface_id; /* Level 2 egress interface ID */
+  uint32_t egress_interface_tx; /* Egress interface transmission */
+  uint32_t buffer_occupancy; /* Buffer occupancy */
 } int_metric_sample;
 
 typedef struct int_metric_info {
