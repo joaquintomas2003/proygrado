@@ -384,6 +384,18 @@ control MyIngress(inout headers hdr,
     }
   }
 
+  action check_features() {
+    meta.bitmap.node_id = (bit<1>) hdr.int_header.instruction & 0x1;
+    meta.bitmap.level1_interfaces = (bit<1>) (hdr.int_header.instruction >> 1) & 0x1;
+    meta.bitmap.hop_latency = (bit<1>) (hdr.int_header.instruction >> 2) & 0x1;
+    meta.bitmap.queue_occupancy = (bit<1>) (hdr.int_header.instruction >> 3) & 0x1;
+    meta.bitmap.ingress_timestamp = (bit<1>) (hdr.int_header.instruction >> 4) & 0x1;
+    meta.bitmap.egress_timestamp = (bit<1>) (hdr.int_header.instruction >> 5) & 0x1;
+    meta.bitmap.level2_interfaces = (bit<1>) (hdr.int_header.instruction >> 6) & 0x1;
+    meta.bitmap.egress_interface_tx = (bit<1>) (hdr.int_header.instruction >> 7) & 0x1;
+    meta.bitmap.buffer_occupancy = (bit<1>) (hdr.int_header.instruction >> 8) & 0x1;
+  }
+
   table ipv4_lpm {
     key = {
       hdr.ipv4.dst_addr: lpm;
@@ -399,6 +411,7 @@ control MyIngress(inout headers hdr,
 
   apply {
     if (hdr.ipv4.isValid()) {
+      check_features();
       ipv4_lpm.apply();
     }
   }
