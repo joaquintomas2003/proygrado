@@ -148,11 +148,11 @@ struct headers {
 
   int_header_t                int_header;
   intl4_shim_t                intl4_shim;
-  stack_element_t[12]          node1_metadata;
-  stack_element_t[12]          node2_metadata;
-  stack_element_t[12]          node3_metadata;
-  stack_element_t[12]          node4_metadata;
-  stack_element_t[12]          node5_metadata;
+  stack_element_t[12]          node1_raw_data;
+  stack_element_t[12]          node2_raw_data;
+  stack_element_t[12]          node3_raw_data;
+  stack_element_t[12]          node4_raw_data;
+  stack_element_t[12]          node5_raw_data;
 }
 
 /*************************************************************************
@@ -218,7 +218,7 @@ parser MyParser(packet_in packet,
 
   /* ---------- Node 1 ---------- */
   state parse_node1_entry {
-    packet.extract(hdr.node1_metadata.next);
+    packet.extract(hdr.node1_raw_data.next);
     meta.node1_entries = meta.node1_entries + ENTRY_LEN;
     transition parse_node1_loop;
   }
@@ -239,7 +239,7 @@ parser MyParser(packet_in packet,
 
   /* ---------- Node 2 ---------- */
   state parse_node2_entry {
-    packet.extract(hdr.node2_metadata.next);
+    packet.extract(hdr.node2_raw_data.next);
     meta.node2_entries = meta.node2_entries + ENTRY_LEN;
     transition parse_node2_loop;
   }
@@ -260,7 +260,7 @@ parser MyParser(packet_in packet,
 
   /* ---------- Node 3 ---------- */
   state parse_node3_entry {
-    packet.extract(hdr.node3_metadata.next);
+    packet.extract(hdr.node3_raw_data.next);
     meta.node3_entries = meta.node3_entries + ENTRY_LEN;
     transition parse_node3_loop;
   }
@@ -281,7 +281,7 @@ parser MyParser(packet_in packet,
 
   /* ---------- Node 4 ---------- */
   state parse_node4_entry {
-    packet.extract(hdr.node4_metadata.next);
+    packet.extract(hdr.node4_raw_data.next);
     meta.node4_entries = meta.node4_entries + ENTRY_LEN;
     transition parse_node4_loop;
   }
@@ -302,7 +302,7 @@ parser MyParser(packet_in packet,
 
   /* ---------- Node 5 ---------- */
   state parse_node5_entry {
-    packet.extract(hdr.node5_metadata.next);
+    packet.extract(hdr.node5_raw_data.next);
     meta.node5_entries = meta.node5_entries + ENTRY_LEN;
     transition parse_node5_loop;
   }
@@ -379,11 +379,11 @@ control MyDeparser(packet_out packet, in headers hdr) {
     packet.emit(hdr.tcp);
     packet.emit(hdr.intl4_shim);
     packet.emit(hdr.int_header);
-    packet.emit(hdr.node1_metadata);
-    packet.emit(hdr.node2_metadata);
-    packet.emit(hdr.node3_metadata);
-    packet.emit(hdr.node4_metadata);
-    packet.emit(hdr.node5_metadata);
+    packet.emit(hdr.node1_raw_data);
+    packet.emit(hdr.node2_raw_data);
+    packet.emit(hdr.node3_raw_data);
+    packet.emit(hdr.node4_raw_data);
+    packet.emit(hdr.node5_raw_data);
   }
 }
 
