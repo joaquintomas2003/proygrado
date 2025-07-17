@@ -103,10 +103,31 @@ struct bitmap_t {
   bit<1> buffer_occupancy; // Bit 8
 }
 
+struct node_metadata_t {
+  bit<32> node_id;
+  bit<16> level1_ingress_interface_id;
+  bit<16> level1_egress_interface_id;
+  bit<32> hop_latency;
+  bit<8> queue_id;
+  bit<24> queue_occupancy;
+  bit<64> ingress_timestamp;
+  bit<64> egress_timestamp;
+  bit<16> level2_ingress_interface_id;
+  bit<16> level2_egress_interface_id;
+  bit<32> egress_interface_tx;
+  bit<8> buffer_id;
+  bit<24> buffer_occupancy;
+}
+
 struct metadata {
   bit<8> counter;             // Counter for stack elements
   bit<8>  stack_size;          // Size of the INT stack
   bitmap_t bitmap; // Bitmap indicating which metadata is present
+  node_metadata_t node1_metadata;
+  node_metadata_t node2_metadata;
+  node_metadata_t node3_metadata;
+  node_metadata_t node4_metadata;
+  node_metadata_t node5_metadata;
 
   /* Number of node metadata blocks present in this packet */
   bit<8> nodes_present;
@@ -384,7 +405,7 @@ control MyIngress(inout headers hdr,
     }
   }
 
-  action check_features() {
+  action populate_requested_metadata() {
     meta.bitmap.node_id = (bit<1>) hdr.int_header.instruction & 0x1;
     meta.bitmap.level1_interfaces = (bit<1>) (hdr.int_header.instruction >> 1) & 0x1;
     meta.bitmap.hop_latency = (bit<1>) (hdr.int_header.instruction >> 2) & 0x1;
@@ -411,7 +432,8 @@ control MyIngress(inout headers hdr,
 
   apply {
     if (hdr.ipv4.isValid()) {
-      check_features();
+      populate_requested_metadata();
+      save_nodes_metadata();
       ipv4_lpm.apply();
     }
   }
