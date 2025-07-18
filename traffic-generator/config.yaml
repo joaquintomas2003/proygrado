@@ -1,0 +1,15 @@
+num_packets: 1000
+output_pcap: "generated_int.pcap"
+src_port: 12345
+dst_port: 80
+int_udp_dst_port: 5000
+original_proto: 6  # TCP
+
+hops:
+  - 1
+  - 2
+  - 3
+
+instruction_bits: [0, 2]  # Node ID, Hop latency
+
+payload: "hello world!"

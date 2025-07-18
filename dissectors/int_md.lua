@@ -156,8 +156,9 @@ function int_md.dissector(buffer, pinfo, tree)
         local len = metadata_bit_lengths[i]
         local label = instruction_fields[i] or ("Reserved Bit " .. i)
         local field_buf = hop_buf(meta_offset, len)
-        local field_value = field_buf:uint()
-        hop_tree:add(field_buf, string.format("%s: %d", label, field_value))
+        local field_value = len == 8 and field_buf:uint64() or field_buf:uint()
+        local display_value = (len == 8) and tostring(field_value) or field_value
+        hop_tree:add(field_buf, string.format("%s: %s", label, display_value))
         meta_offset = meta_offset + len
       end
     end
