@@ -30,7 +30,7 @@ typedef struct int_metric_info {
 typedef struct bucket_entry {
   uint32_t key[4]; /* ipv4.src_addr, ipv4.dst_addr, (src_port << 16) | dst_port, ipv4.protocol */
   uint32_t packet_count;
-  uint32_t last_update_timestamp; /* Timestamp in nanoseconds */
+  uint64_t last_update_timestamp; /* Timestamp in nanoseconds */
   int_metric_info int_metric_info_value;
 } bucket_entry;
 
@@ -70,16 +70,18 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   // Declare the bucket entry variables
   __addr40 __emem bucket_entry *entry = 0;
   __xrw uint32_t pkt_cnt;
+  __xrw uint64_t ingress_timestamp;
   __xwrite int_metric_sample sample;
   __xwrite uint32_t node_count_wr;
   int i, k;
   uint32_t hash_key[4];
-  uint32_t nodes_present;
+  __xrw uint32_t nodes_present;
   volatile uint32_t hash_value;
 
   // Declare the metadata variables
   __lmem struct pif_header_scalars *scalars;
   __lmem struct pif_header_ingress__bitmap *bitmap;
+  __lmem struct pif_header_intrinsic_metadata *intrinsic_metadata;
   __lmem struct pif_header_ingress__node1_metadata *node1_metadata;
   __lmem struct pif_header_ingress__node2_metadata *node2_metadata;
   __lmem struct pif_header_ingress__node3_metadata *node3_metadata;
@@ -96,6 +98,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   hash_value &= (FLOWCACHE_ROWS - 1);
   bitmap = (__lmem struct pif_header_ingress__bitmap *) (headers + PIF_PARREP_ingress__bitmap_OFF_LW);
   scalars = (__lmem struct pif_header_scalars *) (headers + PIF_PARREP_scalars_OFF_LW);
+  intrinsic_metadata = (__lmem struct pif_header_intrinsic_metadata *) (headers + PIF_PARREP_intrinsic_metadata_OFF_LW);
 
   // Search for an existing entry in the bucket
   for (i = 0; i < BUCKET_SIZE; i++) {
@@ -118,15 +121,20 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
 
   // If we found an empty bucket initialize the entry
   if (entry->packet_count == 0) {
-    __xwrite uint32_t key_wr[4] = {hash_key[0], hash_key[1], hash_key[2], hash_key[3]};
 
     // Save the key in the entry
+    __xwrite uint32_t key_wr[4] = {hash_key[0], hash_key[1], hash_key[2], hash_key[3]};
     mem_write_atomic(key_wr, entry->key, sizeof(key_wr));
 
     // Increment the packet count
     mem_test_add(&pkt_cnt, &entry->packet_count, sizeof(pkt_cnt));
 
+    // Save the last update timestamp
+    ingress_timestamp = ((uint64_t) (intrinsic_metadata->ingress_global_timestamp) << 32) | intrinsic_metadata->__ingress_global_timestamp_1;
+    mem_write_atomic(&ingress_timestamp, &entry->last_update_timestamp, sizeof(ingress_timestamp));
+
     nodes_present = scalars->metadata__nodes_present;
+    mem_write_atomic(&nodes_present, &entry->int_metric_info_value.node_count, sizeof(nodes_present));
 
     if (nodes_present > 0) {
       node1_metadata = (__lmem struct pif_header_ingress__node1_metadata *) (headers + PIF_PARREP_ingress__node1_metadata_OFF_LW);
@@ -211,6 +219,8 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
 
       mem_write_atomic(&sample, &entry->int_metric_info_value.latest[4], sizeof(sample));
     }
+
+
   }
 
   return PIF_PLUGIN_RETURN_FORWARD;
