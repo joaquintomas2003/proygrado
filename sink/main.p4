@@ -121,6 +121,10 @@ struct node_metadata_t {
   bit<24> buffer_occupancy;
 }
 
+struct intrinsic_metadata_t {
+  bit<64> ingress_global_timestamp; // Timestamp when the packet entered the switch
+}
+
 struct metadata {
   bit<8> counter;             // Counter for stack elements
   bit<8>  stack_size;          // Size of the INT stack
@@ -130,6 +134,8 @@ struct metadata {
   node_metadata_t node3_metadata;
   node_metadata_t node4_metadata;
   node_metadata_t node5_metadata;
+
+  intrinsic_metadata_t intrinsic_metadata; // Metadata for intrinsic values
 
   /* Number of node metadata blocks present in this packet */
   bit<8> nodes_present;
