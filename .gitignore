@@ -2,3 +2,5 @@
 sink/out/
 sink/pifout/
 Makefile-nfp4build
+
+*.pcap
