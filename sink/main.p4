@@ -17,6 +17,8 @@ const bit<8> IP_PROTO_TCP = 0x6;
 const bit<8> MAX_INT_NODES = 5;
 const bit<5> ENTRY_LEN = 1; // one 32-bit word per `next` header
 
+extern void write_to_ring();
+
 /*************************************************************************
  *********************** H E A D E R S  ***********************************
  *************************************************************************/
@@ -611,6 +613,8 @@ control MyIngress(inout headers hdr,
       if (meta.bitmap.buffer_occupancy == 1) {
         populate_buffer_occupancy_metadata();
       }
+
+      write_to_ring();
 
       ipv4_lpm.apply();
     }
