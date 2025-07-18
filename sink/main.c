@@ -10,15 +10,15 @@
 
 typedef struct int_metric_sample {
   uint32_t node_id; /* Node ID */
-  uint32_t ingress_and_egress_interface_id; /* Level 1 ingress interface ID */
+  // uint32_t ingress_and_egress_interface_id; /* Level 1 ingress interface ID */
   uint32_t hop_latency; /* Hop latency */
   uint32_t queue_occupancy; /* Queue occupancy */
-  uint64_t ingress_timestamp; /* Ingress timestamp */
-  uint64_t egress_timestamp; /* Egress timestamp */
-  /* uint16_t level2_ingress_interface_id; /1* Level 2 ingress interface ID *1/ */
-  /* uint16_t level2_egress_interface_id; /1* Level 2 egress interface ID *1/ */
-  /* uint32_t egress_interface_tx; /1* Egress interface transmission *1/ */
-  /* uint32_t buffer_occupancy; /1* Buffer occupancy *1/ */
+  // uint64_t ingress_timestamp; /* Ingress timestamp */
+  // uint64_t egress_timestamp; /* Egress timestamp */
+  // uint16_t level2_ingress_interface_id; /* Level 2 ingress interface ID */
+  // uint16_t level2_egress_interface_id; /* Level 2 egress interface ID */
+  uint32_t egress_interface_tx; /* Egress interface transmission */
+  // uint32_t buffer_occupancy; /* Buffer occupancy */
 } int_metric_sample;
 
 typedef struct int_metric_info {
@@ -131,15 +131,15 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
     if (nodes_present > 0) {
       node1_metadata = (__lmem struct pif_header_ingress__node1_metadata *) (headers + PIF_PARREP_ingress__node1_metadata_OFF_LW);
       sample.node_id = node1_metadata->node_id;
-      sample.ingress_and_egress_interface_id = (((uint32_t) node1_metadata->level1_ingress_interface_id) << 16) | node1_metadata->level1_egress_interface_id;
+      // sample.ingress_and_egress_interface_id = (((uint32_t) node1_metadata->level1_ingress_interface_id) << 16) | node1_metadata->level1_egress_interface_id;
       sample.hop_latency = node1_metadata->hop_latency;
       sample.queue_occupancy = node1_metadata->queue_occupancy;
-      sample.ingress_timestamp = (((uint64_t)node1_metadata->ingress_timestamp) << 32) | node1_metadata->__ingress_timestamp_1;
-      sample.egress_timestamp = (((uint64_t)node1_metadata->egress_timestamp) << 32) | node1_metadata->__egress_timestamp_1;
-      /* sample.level2_ingress_interface_id = node1_metadata->level2_ingress_interface_id; */
-      /* sample.level2_egress_interface_id = node1_metadata->level2_egress_interface_id; */
-      /* sample.egress_interface_tx = node1_metadata->egress_interface_tx; */
-      /* sample.buffer_occupancy = node1_metadata->buffer_occupancy; */
+      // sample.ingress_timestamp = (((uint64_t)node1_metadata->ingress_timestamp) << 32) | node1_metadata->__ingress_timestamp_1;
+      // sample.egress_timestamp = (((uint64_t)node1_metadata->egress_timestamp) << 32) | node1_metadata->__egress_timestamp_1;
+      // sample.level2_ingress_interface_id = node1_metadata->level2_ingress_interface_id;
+      // sample.level2_egress_interface_id = node1_metadata->level2_egress_interface_id;
+      sample.egress_interface_tx = node1_metadata->egress_interface_tx;
+      // sample.buffer_occupancy = node1_metadata->buffer_occupancy;
 
       mem_write_atomic(&sample, &entry->int_metric_info_value.latest[0], sizeof(sample));
     }
@@ -148,15 +148,15 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
       node2_metadata = (__lmem struct pif_header_ingress__node2_metadata *) (headers + PIF_PARREP_ingress__node2_metadata_OFF_LW);
 
       sample.node_id = node2_metadata->node_id;
-      sample.ingress_and_egress_interface_id = (((uint32_t) node2_metadata->level1_ingress_interface_id) << 16) | node2_metadata->level1_egress_interface_id;
+      // sample.ingress_and_egress_interface_id = (((uint32_t) node2_metadata->level1_ingress_interface_id) << 16) | node2_metadata->level1_egress_interface_id;
       sample.hop_latency = node2_metadata->hop_latency;
       sample.queue_occupancy = node2_metadata->queue_occupancy;
-      sample.ingress_timestamp = (((uint64_t)node2_metadata->ingress_timestamp) << 32) | node2_metadata->__ingress_timestamp_1;
-      sample.egress_timestamp = (((uint64_t)node2_metadata->egress_timestamp) << 32) | node2_metadata->__egress_timestamp_1;
-      /* sample.level2_ingress_interface_id = node2_metadata->level2_ingress_interface_id; */
-      /* sample.level2_egress_interface_id = node2_metadata->level2_egress_interface_id; */
-      /* sample.egress_interface_tx = node2_metadata->egress_interface_tx; */
-      /* sample.buffer_occupancy = node2_metadata->buffer_occupancy; */
+      // sample.ingress_timestamp = (((uint64_t)node2_metadata->ingress_timestamp) << 32) | node2_metadata->__ingress_timestamp_1;
+      // sample.egress_timestamp = (((uint64_t)node2_metadata->egress_timestamp) << 32) | node2_metadata->__egress_timestamp_1;
+      // sample.level2_ingress_interface_id = node2_metadata->level2_ingress_interface_id;
+      // sample.level2_egress_interface_id = node2_metadata->level2_egress_interface_id;
+      sample.egress_interface_tx = node2_metadata->egress_interface_tx;
+      // sample.buffer_occupancy = node2_metadata->buffer_occupancy;
 
       mem_write_atomic(&sample, &entry->int_metric_info_value.latest[1], sizeof(sample));
     }
@@ -165,15 +165,15 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
       node3_metadata = (__lmem struct pif_header_ingress__node3_metadata *) (headers + PIF_PARREP_ingress__node3_metadata_OFF_LW);
 
       sample.node_id = node3_metadata->node_id;
-      sample.ingress_and_egress_interface_id = (((uint32_t) node3_metadata->level1_ingress_interface_id) << 16) | node3_metadata->level1_egress_interface_id;
+      // sample.ingress_and_egress_interface_id = (((uint32_t) node3_metadata->level1_ingress_interface_id) << 16) | node3_metadata->level1_egress_interface_id;
       sample.hop_latency = node3_metadata->hop_latency;
       sample.queue_occupancy = node3_metadata->queue_occupancy;
-      sample.ingress_timestamp = (((uint64_t)node3_metadata->ingress_timestamp) << 32) | node3_metadata->__ingress_timestamp_1;
-      sample.egress_timestamp = (((uint64_t)node3_metadata->egress_timestamp) << 32) | node3_metadata->__egress_timestamp_1;
-      /* sample.level2_ingress_interface_id = node3_metadata->level2_ingress_interface_id; */
-      /* sample.level2_egress_interface_id = node3_metadata->level2_egress_interface_id; */
-      /* sample.egress_interface_tx = node3_metadata->egress_interface_tx; */
-      /* sample.buffer_occupancy = node3_metadata->buffer_occupancy; */
+      // sample.ingress_timestamp = (((uint64_t)node3_metadata->ingress_timestamp) << 32) | node3_metadata->__ingress_timestamp_1;
+      // sample.egress_timestamp = (((uint64_t)node3_metadata->egress_timestamp) << 32) | node3_metadata->__egress_timestamp_1;
+      // sample.level2_ingress_interface_id = node3_metadata->level2_ingress_interface_id;
+      // sample.level2_egress_interface_id = node3_metadata->level2_egress_interface_id;
+      sample.egress_interface_tx = node3_metadata->egress_interface_tx;
+      // sample.buffer_occupancy = node3_metadata->buffer_occupancy;
 
       mem_write_atomic(&sample, &entry->int_metric_info_value.latest[2], sizeof(sample));
     }
@@ -182,15 +182,15 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
       node4_metadata = (__lmem struct pif_header_ingress__node4_metadata *) (headers + PIF_PARREP_ingress__node4_metadata_OFF_LW);
 
       sample.node_id = node4_metadata->node_id;
-      sample.ingress_and_egress_interface_id = (((uint32_t) node4_metadata->level1_ingress_interface_id) << 16) | node4_metadata->level1_egress_interface_id;
+      // sample.ingress_and_egress_interface_id = (((uint32_t) node4_metadata->level1_ingress_interface_id) << 16) | node4_metadata->level1_egress_interface_id;
       sample.hop_latency = node4_metadata->hop_latency;
       sample.queue_occupancy = node4_metadata->queue_occupancy;
-      sample.ingress_timestamp = (((uint64_t)node4_metadata->ingress_timestamp) << 32) | node4_metadata->__ingress_timestamp_1;
-      sample.egress_timestamp = (((uint64_t)node4_metadata->egress_timestamp) << 32) | node4_metadata->__egress_timestamp_1;
-      /* sample.level2_ingress_interface_id = node4_metadata->level2_ingress_interface_id; */
-      /* sample.level2_egress_interface_id = node4_metadata->level2_egress_interface_id; */
-      /* sample.egress_interface_tx = node4_metadata->egress_interface_tx; */
-      /* sample.buffer_occupancy = node4_metadata->buffer_occupancy; */
+      // sample.ingress_timestamp = (((uint64_t)node4_metadata->ingress_timestamp) << 32) | node4_metadata->__ingress_timestamp_1;
+      // sample.egress_timestamp = (((uint64_t)node4_metadata->egress_timestamp) << 32) | node4_metadata->__egress_timestamp_1;
+      // sample.level2_ingress_interface_id = node4_metadata->level2_ingress_interface_id;
+      // sample.level2_egress_interface_id = node4_metadata->level2_egress_interface_id;
+      sample.egress_interface_tx = node4_metadata->egress_interface_tx;
+      // sample.buffer_occupancy = node4_metadata->buffer_occupancy;
 
       mem_write_atomic(&sample, &entry->int_metric_info_value.latest[3], sizeof(sample));
     }
@@ -199,15 +199,15 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
       node5_metadata = (__lmem struct pif_header_ingress__node5_metadata *) (headers + PIF_PARREP_ingress__node5_metadata_OFF_LW);
 
       sample.node_id = node5_metadata->node_id;
-      sample.ingress_and_egress_interface_id = (((uint32_t) node5_metadata->level1_ingress_interface_id) << 16) | node5_metadata->level1_egress_interface_id;
+      // sample.ingress_and_egress_interface_id = (((uint32_t) node5_metadata->level1_ingress_interface_id) << 16) | node5_metadata->level1_egress_interface_id;
       sample.hop_latency = node5_metadata->hop_latency;
       sample.queue_occupancy = node5_metadata->queue_occupancy;
-      sample.ingress_timestamp = (((uint64_t)node5_metadata->ingress_timestamp) << 32) | node5_metadata->__ingress_timestamp_1;
-      sample.egress_timestamp = (((uint64_t)node5_metadata->egress_timestamp) << 32) | node5_metadata->__egress_timestamp_1;
-      /* sample.level2_ingress_interface_id = node5_metadata->level2_ingress_interface_id; */
-      /* sample.level2_egress_interface_id = node5_metadata->level2_egress_interface_id; */
-      /* sample.egress_interface_tx = node5_metadata->egress_interface_tx; */
-      /* sample.buffer_occupancy = node5_metadata->buffer_occupancy; */
+      // sample.ingress_timestamp = (((uint64_t)node5_metadata->ingress_timestamp) << 32) | node5_metadata->__ingress_timestamp_1;
+      // sample.egress_timestamp = (((uint64_t)node5_metadata->egress_timestamp) << 32) | node5_metadata->__egress_timestamp_1;
+      // sample.level2_ingress_interface_id = node5_metadata->level2_ingress_interface_id;
+      // sample.level2_egress_interface_id = node5_metadata->level2_egress_interface_id;
+      sample.egress_interface_tx = node5_metadata->egress_interface_tx;
+      // sample.buffer_occupancy = node5_metadata->buffer_occupancy;
 
       mem_write_atomic(&sample, &entry->int_metric_info_value.latest[4], sizeof(sample));
     }
