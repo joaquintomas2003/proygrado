@@ -21,6 +21,7 @@ INT_TYPE = 1              # 1 = INT-MD
 NPT_L4 = 2                # indicates that another (the original) L4 header follows the INT stack
 INSTRUCTION_BITMAP = 0b1010000000000000  # Node ID + Hop Latency (bit 0 + bit 2 where bit 0 is MSB)
 
+# Bit: (Field, Length)
 INSTRUCTION_FIELDS = {
     0: ("node_id", 4),
     1: ("iface_l1", 4),
