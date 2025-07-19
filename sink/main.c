@@ -140,7 +140,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   mem_write_atomic(&ingress_timestamp, &entry->last_update_timestamp, sizeof(ingress_timestamp));
 
   // Increment the packet count
-  mem_test_add(&pkt_cnt, &entry->packet_count, sizeof(pkt_cnt));
+  mem_incr32(&entry->packet_count);
 
   if (entry->packet_count == 0) {
     // New entry: initialize
