@@ -50,7 +50,6 @@ case "$COMMAND" in
       --include /opt/netronome/p4/components/flowcache/me/lib/flowcache \
       -4 "$P4_FILE" \
       --nfirc_mac_ingress_timestamp \
-      --shared-codestore \
       -c main.c \
       -A 52 \
       "${EXTRA_ARGS[@]}"
