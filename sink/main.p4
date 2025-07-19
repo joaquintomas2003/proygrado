@@ -620,7 +620,9 @@ control MyIngress(inout headers hdr,
         populate_buffer_occupancy_metadata();
       }
 
-      save_in_hash();
+      if (hdr.intl4_shim.isValid()) {
+        save_in_hash();
+      }
 
       ipv4_lpm.apply();
     }
