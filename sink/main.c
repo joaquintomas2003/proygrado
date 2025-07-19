@@ -83,14 +83,15 @@ static __inline void _write_node_sample(__xwrite int_metric_sample *sample,
 int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_data) {
   // Declare the bucket entry variables
   __addr40 __emem bucket_entry *entry = 0;
+  __xrw int_metric_sample avg_sample;
+  __xrw uint32_t nodes_present;
   __xrw uint32_t pkt_cnt;
   __xrw uint64_t ingress_timestamp;
   __xwrite int_metric_sample sample;
   int i, k;
   uint32_t hash_key[4];
-  __xrw uint32_t nodes_present;
-  volatile uint32_t hash_value;
   void *node_metadata_ptrs[MAX_INT_NODES];
+  volatile uint32_t hash_value;
 
   // Declare the metadata variables
   __lmem struct pif_header_scalars *scalars;
@@ -127,38 +128,68 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
     return PIF_PLUGIN_RETURN_FORWARD;
   }
 
-  // If we found an empty bucket initialize the entry
+  // Metadata pointers for nodes
+  node_metadata_ptrs[0] = headers + PIF_PARREP_ingress__node1_metadata_OFF_LW;
+  node_metadata_ptrs[1] = headers + PIF_PARREP_ingress__node2_metadata_OFF_LW;
+  node_metadata_ptrs[2] = headers + PIF_PARREP_ingress__node3_metadata_OFF_LW;
+  node_metadata_ptrs[3] = headers + PIF_PARREP_ingress__node4_metadata_OFF_LW;
+  node_metadata_ptrs[4] = headers + PIF_PARREP_ingress__node5_metadata_OFF_LW;
+
+  // Save the last update timestamp
+  ingress_timestamp = ((uint64_t) (intrinsic_metadata->ingress_global_timestamp) << 32) | intrinsic_metadata->__ingress_global_timestamp_1;
+  mem_write_atomic(&ingress_timestamp, &entry->last_update_timestamp, sizeof(ingress_timestamp));
+
+  // Increment the packet count
+  mem_test_add(&pkt_cnt, &entry->packet_count, sizeof(pkt_cnt));
+
   if (entry->packet_count == 0) {
-    // Save the key in the entry
+    // New entry: initialize
     __xwrite uint32_t key_wr[4] = {hash_key[0], hash_key[1], hash_key[2], hash_key[3]};
     mem_write_atomic(key_wr, entry->key, sizeof(key_wr));
-
-    // Increment the packet count
-    mem_test_add(&pkt_cnt, &entry->packet_count, sizeof(pkt_cnt));
-
-    // Save the last update timestamp
-    ingress_timestamp = ((uint64_t) (intrinsic_metadata->ingress_global_timestamp) << 32) | intrinsic_metadata->__ingress_global_timestamp_1;
-    mem_write_atomic(&ingress_timestamp, &entry->last_update_timestamp, sizeof(ingress_timestamp));
 
     // Save node count
     nodes_present = scalars->metadata__nodes_present;
     mem_write_atomic(&nodes_present, &entry->int_metric_info_value.node_count, sizeof(nodes_present));
 
-    // Metadata pointers for nodes
-    node_metadata_ptrs[0] = headers + PIF_PARREP_ingress__node1_metadata_OFF_LW;
-    node_metadata_ptrs[1] = headers + PIF_PARREP_ingress__node2_metadata_OFF_LW;
-    node_metadata_ptrs[2] = headers + PIF_PARREP_ingress__node3_metadata_OFF_LW;
-    node_metadata_ptrs[3] = headers + PIF_PARREP_ingress__node4_metadata_OFF_LW;
-    node_metadata_ptrs[4] = headers + PIF_PARREP_ingress__node5_metadata_OFF_LW;
-
-    // Write samples for present nodes
     for (k = 0; k < nodes_present && k < MAX_INT_NODES; k++) {
       void *node_metadata = (__lmem void *)node_metadata_ptrs[k];
       _write_node_sample(&sample, (__addr40 void *)&entry->int_metric_info_value.latest[k], node_metadata);
+      _write_node_sample(&sample, (__addr40 void *)&entry->int_metric_info_value.average[k], node_metadata); // initialize average = latest
     }
 
   } else {
-    // TODO: Update existing entry
+    // Existing entry: update
+    mem_read_atomic(&nodes_present, &entry->int_metric_info_value.node_count, sizeof(nodes_present));
+
+    for (k = 0; k < nodes_present && k < MAX_INT_NODES; k++) {
+      void *node_metadata = (__lmem void *)node_metadata_ptrs[k];
+
+      // Read new sample from node metadata
+      uint32_t *base = (uint32_t *)node_metadata;
+      uint32_t new_node_id = base[0];
+      uint32_t new_hop_latency = base[1];
+      uint32_t new_queue_occupancy = base[2];
+      uint32_t new_egress_interface_tx = base[3];
+
+      // Update latest
+      sample.node_id = new_node_id;
+      sample.hop_latency = new_hop_latency;
+      sample.queue_occupancy = new_queue_occupancy;
+      sample.egress_interface_tx = new_egress_interface_tx;
+
+      mem_write_atomic(&sample, &entry->int_metric_info_value.latest[k], sizeof(sample));
+
+      // Read current average
+      mem_read_atomic(&avg_sample, &entry->int_metric_info_value.average[k], sizeof(avg_sample));
+
+      // Compute new average using integer division
+      avg_sample.node_id = new_node_id; // Keep latest node_id
+      avg_sample.hop_latency = (avg_sample.hop_latency * (pkt_cnt - 1) + new_hop_latency) / pkt_cnt;
+      avg_sample.queue_occupancy = (avg_sample.queue_occupancy * (pkt_cnt - 1) + new_queue_occupancy) / pkt_cnt;
+      avg_sample.egress_interface_tx = (avg_sample.egress_interface_tx * (pkt_cnt - 1) + new_egress_interface_tx) / pkt_cnt;
+
+      mem_write_atomic(&avg_sample, &entry->int_metric_info_value.average[k], sizeof(avg_sample));
+    }
   }
 
   return PIF_PLUGIN_RETURN_FORWARD;
