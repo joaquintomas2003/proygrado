@@ -52,6 +52,7 @@ case "$COMMAND" in
       -4 "$P4_FILE" \
       --nfirc_mac_ingress_timestamp \
       -c main.c \
+      -A 52 \
       "${EXTRA_ARGS[@]}"
 
     echo -e "${GREEN}✅ Compilation complete: $FIRMWARE_PATH${NC}"
