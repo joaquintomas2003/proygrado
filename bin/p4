@@ -44,7 +44,6 @@ case "$COMMAND" in
       -p pifout \
       -o "$FIRMWARE_PATH" \
       -l lithium \
-      --shared-codestore \
       --verbose-generate \
       --verbose-build \
       -d flowcache \
