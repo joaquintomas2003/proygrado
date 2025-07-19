@@ -9,6 +9,8 @@ OUTPUT_PCAP = "int_r3_capture.pcap"
 NUM_PACKETS = 1_000
 PACKET_SIZE = 64  # bytes total
 
+SRC_MAC = "aa:bb:cc:dd:ee:ff"
+DST_MAC = "11:22:33:44:55:66"
 SRC_IP = "10.0.0.1"
 DST_IP = "10.0.0.18"
 SRC_PORT = 5432
@@ -95,6 +97,7 @@ def build_metadata_stack(hops, instruction_bitmap):
 
 
 def generate_int_packet(i, config, instruction_bitmap):
+    eth = Ether(src=SRC_MAC, dst=DST_MAC)
     ip = IP(src=SRC_IP, dst=DST_IP)
     udp = UDP(sport=random.randint(1024, 65535), dport=config["int_udp_dst_port"])
     tcp = TCP(sport=SRC_PORT, dport=DST_PORT, seq=i)
@@ -105,7 +108,7 @@ def generate_int_packet(i, config, instruction_bitmap):
     md_header = build_int_md_header(hop_ml, rhc=1, instruction_bitmap=instruction_bitmap)
     metadata = build_metadata_stack(config["hops"], instruction_bitmap)
 
-    return ip / udp / Raw(shim + md_header + metadata) / tcp / payload
+    return eth / ip / udp / Raw(shim + md_header + metadata) / tcp / payload
 
 def main():
     config = load_config()

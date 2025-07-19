@@ -1,4 +1,4 @@
-num_packets: 1000
+num_packets: 10
 output_pcap: "generated_int.pcap"
 src_port: 12345
 dst_port: 80
