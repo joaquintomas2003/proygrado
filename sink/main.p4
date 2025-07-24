@@ -600,8 +600,6 @@ control MyIngress(inout headers hdr,
       if (hdr.intl4_shim.isValid()) {
         save_in_hash();
       }
-
-      ipv4_lpm.apply();
     }
   }
 }
