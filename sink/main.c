@@ -142,7 +142,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   // Increment the packet count
   mem_incr32(&entry->packet_count);
 
-  if (entry->packet_count == 0) {
+  if (entry->packet_count == 1) {
     // New entry: initialize
     __xwrite uint32_t key_wr[4] = {hash_key[0], hash_key[1], hash_key[2], hash_key[3]};
     mem_write_atomic(key_wr, entry->key, sizeof(key_wr));
