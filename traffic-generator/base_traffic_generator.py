@@ -114,7 +114,9 @@ def main():
     config = load_config()
     instruction_bitmap = build_instruction_bitmap(config.get("instruction_bits", []))
     packets = [generate_int_packet(i, config, instruction_bitmap) for i in range(config["num_packets"])]
-    wrpcap(config["output_pcap"], packets)
+    parent_path = os.path.dirname(os.path.abspath(__file__))
+    output_path = os.path.join(parent_path, "traces", config["output_pcap"])
+    wrpcap(output_path, packets)
     print(f"{len(packets)} packets written to {config['output_pcap']}")
 
 if __name__ == "__main__":
