@@ -3,4 +3,5 @@ sink/out/
 sink/pifout/
 Makefile-nfp4build
 
-*.pcap
+traffic-generator/traces/*
+!traffic-generator/traces/.keep
