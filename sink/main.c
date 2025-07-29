@@ -75,8 +75,10 @@ static __inline void _write_node_sample(__xwrite int_metric_sample *sample,
                                         __addr40 void *dest,
                                         void *node_metadata_ptr) {
   uint32_t *base = (uint32_t *)node_metadata_ptr;
+  __lmem struct pif_header_ingress__node1_metadata *node1_metadata;
+  node1_metadata = (__lmem struct pif_header_ingress__node1_metadata *) (headers + PIF_PARREP_ingress__node1_metadata_OFF_LW);
 
-  sample->node_id = base[0];             // node_id
+  sample->node_id = node1_metadata->node_id; // node_id
   sample->hop_latency = base[1];         // hop_latency
   sample->queue_occupancy = base[2];     // queue_occupancy
   sample->egress_interface_tx = base[3]; // egress_interface_tx
