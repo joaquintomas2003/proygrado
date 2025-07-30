@@ -89,7 +89,6 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   __addr40 __emem bucket_entry *entry = 0;
   __xrw int_metric_sample avg_sample;
   __xrw uint32_t nodes_present;
-  __xrw uint32_t pkt_cnt;
   __xrw uint64_t ingress_timestamp;
   __xwrite int_metric_sample sample;
   int i, k;
@@ -101,6 +100,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   __lmem struct pif_header_scalars *scalars;
   __lmem struct pif_header_ingress__bitmap *bitmap;
   __lmem struct pif_header_intrinsic_metadata *intrinsic_metadata;
+  __lmem struct pif_header_ingress__node1_metadata *node;
 
   // Get the hash key from the 5-tuple
   if (_get_hash_key(headers, hash_key) < 0) {
@@ -119,10 +119,10 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
     entry = &int_flowcache[hash_value].entry[i];
 
     if (entry->packet_count == 0 ||
-        (entry->key[0] == hash_key[0] &&
-         entry->key[1] == hash_key[1] &&
-         entry->key[2] == hash_key[2] &&
-         entry->key[3] == hash_key[3])) {
+      (entry->key[0] == hash_key[0] &&
+      entry->key[1] == hash_key[1] &&
+      entry->key[2] == hash_key[2] &&
+      entry->key[3] == hash_key[3])) {
       break;
     }
   }
@@ -146,53 +146,36 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   // Increment the packet count
   mem_incr32(&entry->packet_count);
 
+  nodes_present = scalars->metadata__nodes_present;
+
+  // If this is the first packet for this flow, initialize the entry
   if (entry->packet_count == 1) {
-    // New entry: initialize
     __xwrite uint32_t key_wr[4] = {hash_key[0], hash_key[1], hash_key[2], hash_key[3]};
     mem_write_atomic(key_wr, entry->key, sizeof(key_wr));
-
-    // Save node count
-    nodes_present = scalars->metadata__nodes_present;
     mem_write_atomic(&nodes_present, &entry->int_metric_info_value.node_count, sizeof(nodes_present));
+  }
 
-    for (k = 0; k < nodes_present && k < MAX_INT_NODES; k++) {
-      void *node_metadata = (__lmem void *)node_metadata_ptrs[k];
-      _write_node_sample(&sample, (__addr40 void *)&entry->int_metric_info_value.latest[k], node_metadata);
-      _write_node_sample(&sample, (__addr40 void *)&entry->int_metric_info_value.average[k], node_metadata); // initialize average = latest
-    }
+  for (k = 0; k < nodes_present && k < MAX_INT_NODES; k++) {
+    node = (__lmem struct pif_header_ingress__node1_metadata *)node_metadata_ptrs[k];
 
-  } else {
-    // Existing entry: update
-    mem_read_atomic(&nodes_present, &entry->int_metric_info_value.node_count, sizeof(nodes_present));
+    // Write latest sample
+    sample.node_id = node->node_id;
+    sample.hop_latency = node->hop_latency;
+    sample.queue_occupancy = node->queue_occupancy;
+    sample.egress_interface_tx = node->egress_interface_tx;
+    mem_write_atomic(&sample, &entry->int_metric_info_value.latest[k], sizeof(sample));
 
-    for (k = 0; k < nodes_present && k < MAX_INT_NODES; k++) {
-      void *node_metadata = (__lmem void *)node_metadata_ptrs[k];
-
-      // Read new sample from node metadata
-      uint32_t *base = (uint32_t *)node_metadata;
-      uint32_t new_node_id = base[0];
-      uint32_t new_hop_latency = base[1];
-      uint32_t new_queue_occupancy = base[2];
-      uint32_t new_egress_interface_tx = base[3];
-
-      // Update latest
-      sample.node_id = new_node_id;
-      sample.hop_latency = new_hop_latency;
-      sample.queue_occupancy = new_queue_occupancy;
-      sample.egress_interface_tx = new_egress_interface_tx;
-
-      mem_write_atomic(&sample, &entry->int_metric_info_value.latest[k], sizeof(sample));
-
-      // Read current average
+    if (entry->packet_count > 1) {
       mem_read_atomic(&avg_sample, &entry->int_metric_info_value.average[k], sizeof(avg_sample));
 
-      // Compute new average using integer division
-      avg_sample.node_id = new_node_id; // Keep latest node_id
-      avg_sample.hop_latency = (avg_sample.hop_latency * (pkt_cnt - 1) + new_hop_latency) / pkt_cnt;
-      avg_sample.queue_occupancy = (avg_sample.queue_occupancy * (pkt_cnt - 1) + new_queue_occupancy) / pkt_cnt;
-      avg_sample.egress_interface_tx = (avg_sample.egress_interface_tx * (pkt_cnt - 1) + new_egress_interface_tx) / pkt_cnt;
+      avg_sample.node_id = node->node_id;
+      avg_sample.hop_latency = (avg_sample.hop_latency * (entry->packet_count - 1) + node->hop_latency) / entry->packet_count;
+      avg_sample.queue_occupancy = (avg_sample.queue_occupancy * (entry->packet_count - 1) + node->queue_occupancy) / entry->packet_count;
+      avg_sample.egress_interface_tx = (avg_sample.egress_interface_tx * (entry->packet_count - 1) + node->egress_interface_tx) / entry->packet_count;
 
       mem_write_atomic(&avg_sample, &entry->int_metric_info_value.average[k], sizeof(avg_sample));
+    } else {
+      mem_write_atomic(&sample, &entry->int_metric_info_value.average[k], sizeof(sample));
     }
   }
 
