@@ -1,4 +1,4 @@
-num_packets: 10
+num_packets: 1
 output_pcap: "generated_int.pcap"
 src_port: 12345
 dst_port: 80
@@ -9,7 +9,9 @@ hops:
   - 1
   - 2
   - 3
+  - 4
+  - 5
 
-instruction_bits: [0, 2]  # Node ID, Hop latency
+instruction_bits: [0, 2, 3, 7]  # Node ID, Hop latency
 
 payload: "hello world!"
