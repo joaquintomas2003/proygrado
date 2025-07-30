@@ -105,7 +105,7 @@ def generate_int_packet(i, config, instruction_bitmap):
 
     hop_ml = compute_hop_ml(instruction_bitmap)
     shim = build_int_shim(hop_ml, len(config["hops"]), config["original_proto"])
-    md_header = build_int_md_header(hop_ml, rhc=1, instruction_bitmap=instruction_bitmap)
+    md_header = build_int_md_header(hop_ml, rhc=0, instruction_bitmap=instruction_bitmap)
     metadata = build_metadata_stack(config["hops"], instruction_bitmap)
 
     return eth / ip / udp / Raw(shim + md_header + metadata) / tcp / payload
