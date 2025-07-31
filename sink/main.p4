@@ -110,8 +110,7 @@ struct node_metadata_t {
   bit<16> level1_ingress_interface_id;
   bit<16> level1_egress_interface_id;
   bit<32> hop_latency;
-  bit<8> queue_id;
-  bit<24> queue_occupancy;
+  bit<32> queue_occupancy; // queue id (8b) + queue occupancy (24b)
   bit<64> ingress_timestamp;
   bit<64> egress_timestamp;
   bit<16> level2_ingress_interface_id;
@@ -463,26 +462,11 @@ control MyIngress(inout headers hdr,
   }
 
   action populate_queue_occupancy_metadata() {
-    if (meta.nodes_present > 0) {
-      meta.node1_metadata.queue_id = (bit<8>) hdr.node1_raw_data[0].data;
-      meta.node1_metadata.queue_occupancy = (bit<24>) (hdr.node1_raw_data[0].data >> 8);
-    }
-    if (meta.nodes_present > 1) {
-      meta.node2_metadata.queue_id = (bit<8>) hdr.node2_raw_data[0].data;
-      meta.node2_metadata.queue_occupancy = (bit<24>) (hdr.node2_raw_data[0].data >> 8);
-    }
-    if (meta.nodes_present > 2) {
-      meta.node3_metadata.queue_id = (bit<8>) hdr.node3_raw_data[0].data;
-      meta.node3_metadata.queue_occupancy = (bit<24>) (hdr.node3_raw_data[0].data >> 8);
-    }
-    if (meta.nodes_present > 3) {
-      meta.node4_metadata.queue_id = (bit<8>) hdr.node4_raw_data[0].data;
-      meta.node4_metadata.queue_occupancy = (bit<24>) (hdr.node4_raw_data[0].data >> 8);
-    }
-    if (meta.nodes_present > 4) {
-      meta.node5_metadata.queue_id = (bit<8>) hdr.node5_raw_data[0].data;
-      meta.node5_metadata.queue_occupancy = (bit<24>) (hdr.node5_raw_data[0].data >> 8);
-    }
+    if (meta.nodes_present > 0) meta.node1_metadata.queue_occupancy = hdr.node1_raw_data[0].data;
+    if (meta.nodes_present > 1) meta.node2_metadata.queue_occupancy = hdr.node2_raw_data[0].data;
+    if (meta.nodes_present > 2) meta.node3_metadata.queue_occupancy = hdr.node3_raw_data[0].data;
+    if (meta.nodes_present > 3) meta.node4_metadata.queue_occupancy = hdr.node4_raw_data[0].data;
+    if (meta.nodes_present > 4) meta.node5_metadata.queue_occupancy = hdr.node5_raw_data[0].data;
   }
 
   action populate_ingress_timestamp_metadata() {
