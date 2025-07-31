@@ -107,10 +107,9 @@ struct bitmap_t {
 
 struct node_metadata_t {
   bit<32> node_id;
-  bit<16> level1_ingress_interface_id;
-  bit<16> level1_egress_interface_id;
+  bit<32> level1_interfaces; // Level 1 Ingress Interface ID (16 bits) + Egress Interface ID (16 bits)
   bit<32> hop_latency;
-  bit<32> queue_occupancy; // queue id (8b) + queue occupancy (24b)
+  bit<32> queue_occupancy; // Queue ID (8 bits) + Queue occupancy (24 bits)
   bit<64> ingress_timestamp;
   bit<64> egress_timestamp;
   bit<16> level2_ingress_interface_id;
@@ -431,26 +430,11 @@ control MyIngress(inout headers hdr,
   }
 
   action populate_level1_interfaces_metadata() {
-    if (meta.nodes_present > 0) {
-      meta.node1_metadata.level1_ingress_interface_id = (bit<16>) hdr.node1_raw_data[0].data;
-      meta.node1_metadata.level1_egress_interface_id = (bit<16>) (hdr.node1_raw_data[0].data >> 16);
-    }
-    if (meta.nodes_present > 1) {
-      meta.node2_metadata.level1_ingress_interface_id = (bit<16>) hdr.node2_raw_data[0].data;
-      meta.node2_metadata.level1_egress_interface_id = (bit<16>) (hdr.node2_raw_data[0].data >> 16);
-    }
-    if (meta.nodes_present > 2) {
-      meta.node3_metadata.level1_ingress_interface_id = (bit<16>) hdr.node3_raw_data[0].data;
-      meta.node3_metadata.level1_egress_interface_id = (bit<16>) (hdr.node3_raw_data[0].data >> 16);
-    }
-    if (meta.nodes_present > 3) {
-      meta.node4_metadata.level1_ingress_interface_id = (bit<16>) hdr.node4_raw_data[0].data;
-      meta.node4_metadata.level1_egress_interface_id = (bit<16>) (hdr.node4_raw_data[0].data >> 16);
-    }
-    if (meta.nodes_present > 4) {
-      meta.node5_metadata.level1_ingress_interface_id = (bit<16>) hdr.node5_raw_data[0].data;
-      meta.node5_metadata.level1_egress_interface_id = (bit<16>) (hdr.node5_raw_data[0].data >> 16);
-    }
+    if (meta.nodes_present > 0) meta.node1_metadata.level1_interfaces = hdr.node1_raw_data[0].data;
+    if (meta.nodes_present > 1) meta.node2_metadata.level1_interfaces = hdr.node2_raw_data[0].data;
+    if (meta.nodes_present > 2) meta.node3_metadata.level1_interfaces = hdr.node3_raw_data[0].data;
+    if (meta.nodes_present > 3) meta.node4_metadata.level1_interfaces = hdr.node4_raw_data[0].data;
+    if (meta.nodes_present > 4) meta.node5_metadata.level1_interfaces = hdr.node5_raw_data[0].data;
   }
 
   action populate_hop_latency_metadata() {
