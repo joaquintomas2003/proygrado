@@ -114,8 +114,7 @@ struct node_metadata_t {
   bit<64> egress_timestamp;
   bit<64> level2_interfaces; // Level 2 Ingress Interface ID (32 bits) + Egress Interface ID (32 bits)
   bit<32> egress_interface_tx;
-  bit<8> buffer_id;
-  bit<24> buffer_occupancy;
+  bit<32> buffer_occupancy;
 }
 
 struct intrinsic_metadata_t {
@@ -485,26 +484,11 @@ control MyIngress(inout headers hdr,
   }
 
   action populate_buffer_occupancy_metadata() {
-    if (meta.nodes_present > 0) {
-      meta.node1_metadata.buffer_id = (bit<8>) hdr.node1_raw_data[0].data;
-      meta.node1_metadata.buffer_occupancy = (bit<24>) (hdr.node1_raw_data[0].data >> 8);
-    }
-    if (meta.nodes_present > 1) {
-      meta.node2_metadata.buffer_id = (bit<8>) hdr.node2_raw_data[0].data;
-      meta.node2_metadata.buffer_occupancy = (bit<24>) (hdr.node2_raw_data[0].data >> 8);
-    }
-    if (meta.nodes_present > 2) {
-      meta.node3_metadata.buffer_id = (bit<8>) hdr.node3_raw_data[0].data;
-      meta.node3_metadata.buffer_occupancy = (bit<24>) (hdr.node3_raw_data[0].data >> 8);
-    }
-    if (meta.nodes_present > 3) {
-      meta.node4_metadata.buffer_id = (bit<8>) hdr.node4_raw_data[0].data;
-      meta.node4_metadata.buffer_occupancy = (bit<24>) (hdr.node4_raw_data[0].data >> 8);
-    }
-    if (meta.nodes_present > 4) {
-      meta.node5_metadata.buffer_id = (bit<8>) hdr.node5_raw_data[0].data;
-      meta.node5_metadata.buffer_occupancy = (bit<24>) (hdr.node5_raw_data[0].data >> 8);
-    }
+    if (meta.nodes_present > 0) meta.node1_metadata.buffer_occupancy = (bit<32>) hdr.node1_raw_data[0].data;
+    if (meta.nodes_present > 1) meta.node2_metadata.buffer_occupancy = (bit<32>) hdr.node2_raw_data[0].data;
+    if (meta.nodes_present > 2) meta.node3_metadata.buffer_occupancy = (bit<32>) hdr.node3_raw_data[0].data;
+    if (meta.nodes_present > 3) meta.node4_metadata.buffer_occupancy = (bit<32>) hdr.node4_raw_data[0].data;
+    if (meta.nodes_present > 4) meta.node5_metadata.buffer_occupancy = (bit<32>) hdr.node5_raw_data[0].data;
   }
 
   apply {
