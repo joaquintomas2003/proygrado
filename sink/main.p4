@@ -107,18 +107,14 @@ struct bitmap_t {
 
 struct node_metadata_t {
   bit<32> node_id;
-  bit<16> level1_ingress_interface_id;
-  bit<16> level1_egress_interface_id;
+  bit<32> level1_interfaces; // Level 1 Ingress Interface ID (16 bits) + Egress Interface ID (16 bits)
   bit<32> hop_latency;
-  bit<8> queue_id;
-  bit<24> queue_occupancy;
+  bit<32> queue_occupancy; // Queue ID (8 bits) + Queue occupancy (24 bits)
   bit<64> ingress_timestamp;
   bit<64> egress_timestamp;
-  bit<16> level2_ingress_interface_id;
-  bit<16> level2_egress_interface_id;
+  bit<64> level2_interfaces; // Level 2 Ingress Interface ID (32 bits) + Egress Interface ID (32 bits)
   bit<32> egress_interface_tx;
-  bit<8> buffer_id;
-  bit<24> buffer_occupancy;
+  bit<32> buffer_occupancy;
 }
 
 struct intrinsic_metadata_t {
@@ -432,26 +428,11 @@ control MyIngress(inout headers hdr,
   }
 
   action populate_level1_interfaces_metadata() {
-    if (meta.nodes_present > 0) {
-      meta.node1_metadata.level1_ingress_interface_id = (bit<16>) hdr.node1_raw_data[0].data;
-      meta.node1_metadata.level1_egress_interface_id = (bit<16>) (hdr.node1_raw_data[0].data >> 16);
-    }
-    if (meta.nodes_present > 1) {
-      meta.node2_metadata.level1_ingress_interface_id = (bit<16>) hdr.node2_raw_data[0].data;
-      meta.node2_metadata.level1_egress_interface_id = (bit<16>) (hdr.node2_raw_data[0].data >> 16);
-    }
-    if (meta.nodes_present > 2) {
-      meta.node3_metadata.level1_ingress_interface_id = (bit<16>) hdr.node3_raw_data[0].data;
-      meta.node3_metadata.level1_egress_interface_id = (bit<16>) (hdr.node3_raw_data[0].data >> 16);
-    }
-    if (meta.nodes_present > 3) {
-      meta.node4_metadata.level1_ingress_interface_id = (bit<16>) hdr.node4_raw_data[0].data;
-      meta.node4_metadata.level1_egress_interface_id = (bit<16>) (hdr.node4_raw_data[0].data >> 16);
-    }
-    if (meta.nodes_present > 4) {
-      meta.node5_metadata.level1_ingress_interface_id = (bit<16>) hdr.node5_raw_data[0].data;
-      meta.node5_metadata.level1_egress_interface_id = (bit<16>) (hdr.node5_raw_data[0].data >> 16);
-    }
+    if (meta.nodes_present > 0) meta.node1_metadata.level1_interfaces = hdr.node1_raw_data[0].data;
+    if (meta.nodes_present > 1) meta.node2_metadata.level1_interfaces = hdr.node2_raw_data[0].data;
+    if (meta.nodes_present > 2) meta.node3_metadata.level1_interfaces = hdr.node3_raw_data[0].data;
+    if (meta.nodes_present > 3) meta.node4_metadata.level1_interfaces = hdr.node4_raw_data[0].data;
+    if (meta.nodes_present > 4) meta.node5_metadata.level1_interfaces = hdr.node5_raw_data[0].data;
   }
 
   action populate_hop_latency_metadata() {
@@ -463,26 +444,11 @@ control MyIngress(inout headers hdr,
   }
 
   action populate_queue_occupancy_metadata() {
-    if (meta.nodes_present > 0) {
-      meta.node1_metadata.queue_id = (bit<8>) hdr.node1_raw_data[0].data;
-      meta.node1_metadata.queue_occupancy = (bit<24>) (hdr.node1_raw_data[0].data >> 8);
-    }
-    if (meta.nodes_present > 1) {
-      meta.node2_metadata.queue_id = (bit<8>) hdr.node2_raw_data[0].data;
-      meta.node2_metadata.queue_occupancy = (bit<24>) (hdr.node2_raw_data[0].data >> 8);
-    }
-    if (meta.nodes_present > 2) {
-      meta.node3_metadata.queue_id = (bit<8>) hdr.node3_raw_data[0].data;
-      meta.node3_metadata.queue_occupancy = (bit<24>) (hdr.node3_raw_data[0].data >> 8);
-    }
-    if (meta.nodes_present > 3) {
-      meta.node4_metadata.queue_id = (bit<8>) hdr.node4_raw_data[0].data;
-      meta.node4_metadata.queue_occupancy = (bit<24>) (hdr.node4_raw_data[0].data >> 8);
-    }
-    if (meta.nodes_present > 4) {
-      meta.node5_metadata.queue_id = (bit<8>) hdr.node5_raw_data[0].data;
-      meta.node5_metadata.queue_occupancy = (bit<24>) (hdr.node5_raw_data[0].data >> 8);
-    }
+    if (meta.nodes_present > 0) meta.node1_metadata.queue_occupancy = hdr.node1_raw_data[0].data;
+    if (meta.nodes_present > 1) meta.node2_metadata.queue_occupancy = hdr.node2_raw_data[0].data;
+    if (meta.nodes_present > 2) meta.node3_metadata.queue_occupancy = hdr.node3_raw_data[0].data;
+    if (meta.nodes_present > 3) meta.node4_metadata.queue_occupancy = hdr.node4_raw_data[0].data;
+    if (meta.nodes_present > 4) meta.node5_metadata.queue_occupancy = hdr.node5_raw_data[0].data;
   }
 
   action populate_ingress_timestamp_metadata() {
@@ -502,26 +468,11 @@ control MyIngress(inout headers hdr,
   }
 
   action populate_level2_interfaces_metadata() {
-    if (meta.nodes_present > 0) {
-      meta.node1_metadata.level2_ingress_interface_id = (bit<16>) hdr.node1_raw_data[0].data;
-      meta.node1_metadata.level2_egress_interface_id = (bit<16>) (hdr.node1_raw_data[0].data >> 16);
-    }
-    if (meta.nodes_present > 1) {
-      meta.node2_metadata.level2_ingress_interface_id = (bit<16>) hdr.node2_raw_data[0].data;
-      meta.node2_metadata.level2_egress_interface_id = (bit<16>) (hdr.node2_raw_data[0].data >> 16);
-    }
-    if (meta.nodes_present > 2) {
-      meta.node3_metadata.level2_ingress_interface_id = (bit<16>) hdr.node3_raw_data[0].data;
-      meta.node3_metadata.level2_egress_interface_id = (bit<16>) (hdr.node3_raw_data[0].data >> 16);
-    }
-    if (meta.nodes_present > 3) {
-      meta.node4_metadata.level2_ingress_interface_id = (bit<16>) hdr.node4_raw_data[0].data;
-      meta.node4_metadata.level2_egress_interface_id = (bit<16>) (hdr.node4_raw_data[0].data >> 16);
-    }
-    if (meta.nodes_present > 4) {
-      meta.node5_metadata.level2_ingress_interface_id = (bit<16>) hdr.node5_raw_data[0].data;
-      meta.node5_metadata.level2_egress_interface_id = (bit<16>) (hdr.node5_raw_data[0].data >> 16);
-    }
+    if (meta.nodes_present > 0) meta.node1_metadata.level2_interfaces = (bit<64>) hdr.node1_raw_data[0].data << 32 | (bit<64>) (hdr.node1_raw_data[1].data);
+    if (meta.nodes_present > 1) meta.node2_metadata.level2_interfaces = (bit<64>) hdr.node2_raw_data[0].data << 32 | (bit<64>) (hdr.node2_raw_data[1].data);
+    if (meta.nodes_present > 2) meta.node3_metadata.level2_interfaces = (bit<64>) hdr.node3_raw_data[0].data << 32 | (bit<64>) (hdr.node3_raw_data[1].data);
+    if (meta.nodes_present > 3) meta.node4_metadata.level2_interfaces = (bit<64>) hdr.node4_raw_data[0].data << 32 | (bit<64>) (hdr.node4_raw_data[1].data);
+    if (meta.nodes_present > 4) meta.node5_metadata.level2_interfaces = (bit<64>) hdr.node5_raw_data[0].data << 32 | (bit<64>) (hdr.node5_raw_data[1].data);
   }
 
   action populate_egress_interface_tx_metadata() {
@@ -533,26 +484,11 @@ control MyIngress(inout headers hdr,
   }
 
   action populate_buffer_occupancy_metadata() {
-    if (meta.nodes_present > 0) {
-      meta.node1_metadata.buffer_id = (bit<8>) hdr.node1_raw_data[0].data;
-      meta.node1_metadata.buffer_occupancy = (bit<24>) (hdr.node1_raw_data[0].data >> 8);
-    }
-    if (meta.nodes_present > 1) {
-      meta.node2_metadata.buffer_id = (bit<8>) hdr.node2_raw_data[0].data;
-      meta.node2_metadata.buffer_occupancy = (bit<24>) (hdr.node2_raw_data[0].data >> 8);
-    }
-    if (meta.nodes_present > 2) {
-      meta.node3_metadata.buffer_id = (bit<8>) hdr.node3_raw_data[0].data;
-      meta.node3_metadata.buffer_occupancy = (bit<24>) (hdr.node3_raw_data[0].data >> 8);
-    }
-    if (meta.nodes_present > 3) {
-      meta.node4_metadata.buffer_id = (bit<8>) hdr.node4_raw_data[0].data;
-      meta.node4_metadata.buffer_occupancy = (bit<24>) (hdr.node4_raw_data[0].data >> 8);
-    }
-    if (meta.nodes_present > 4) {
-      meta.node5_metadata.buffer_id = (bit<8>) hdr.node5_raw_data[0].data;
-      meta.node5_metadata.buffer_occupancy = (bit<24>) (hdr.node5_raw_data[0].data >> 8);
-    }
+    if (meta.nodes_present > 0) meta.node1_metadata.buffer_occupancy = (bit<32>) hdr.node1_raw_data[0].data;
+    if (meta.nodes_present > 1) meta.node2_metadata.buffer_occupancy = (bit<32>) hdr.node2_raw_data[0].data;
+    if (meta.nodes_present > 2) meta.node3_metadata.buffer_occupancy = (bit<32>) hdr.node3_raw_data[0].data;
+    if (meta.nodes_present > 3) meta.node4_metadata.buffer_occupancy = (bit<32>) hdr.node4_raw_data[0].data;
+    if (meta.nodes_present > 4) meta.node5_metadata.buffer_occupancy = (bit<32>) hdr.node5_raw_data[0].data;
   }
 
   apply {
@@ -587,6 +523,7 @@ control MyIngress(inout headers hdr,
       }
       if (meta.bitmap.level2_interfaces == 1) {
         populate_level2_interfaces_metadata();
+        pop_from_stacks();
         pop_from_stacks();
       }
       if (meta.bitmap.egress_interface_tx == 1) {
