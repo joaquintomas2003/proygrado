@@ -7,6 +7,7 @@
 #define MAX_INT_NODES 5
 #define IP_PROTO_UDP 0x11
 #define IP_PROTO_TCP 0x6
+#define RING_BUFFER_ENTRIES 64000
 
 typedef struct int_metric_sample {
   uint32_t node_id; /* Node ID */
@@ -39,6 +40,24 @@ typedef struct bucket_list {
 } bucket_list;
 
 __export __emem bucket_list int_flowcache[FLOWCACHE_ROWS];
+
+__export __emem bucket_entry general_ring_buffer1[RING_BUFFER_ENTRIES];
+__export __emem bucket_entry general_ring_buffer2[RING_BUFFER_ENTRIES];
+__export __emem bucket_entry general_ring_buffer3[RING_BUFFER_ENTRIES];
+__export __emem bucket_entry general_ring_buffer4[RING_BUFFER_ENTRIES];
+__export __emem bucket_entry general_ring_buffer5[RING_BUFFER_ENTRIES];
+__export __emem bucket_entry general_ring_buffer6[RING_BUFFER_ENTRIES];
+__export __emem bucket_entry general_ring_buffer7[RING_BUFFER_ENTRIES];
+__export __emem bucket_entry general_ring_buffer8[RING_BUFFER_ENTRIES];
+
+__export __emem bucket_entry event_ring_buffer1[RING_BUFFER_ENTRIES];
+__export __emem bucket_entry event_ring_buffer2[RING_BUFFER_ENTRIES];
+__export __emem bucket_entry event_ring_buffer3[RING_BUFFER_ENTRIES];
+__export __emem bucket_entry event_ring_buffer4[RING_BUFFER_ENTRIES];
+__export __emem bucket_entry event_ring_buffer5[RING_BUFFER_ENTRIES];
+__export __emem bucket_entry event_ring_buffer6[RING_BUFFER_ENTRIES];
+__export __emem bucket_entry event_ring_buffer7[RING_BUFFER_ENTRIES];
+__export __emem bucket_entry event_ring_buffer8[RING_BUFFER_ENTRIES];
 
 static __inline int _get_hash_key(EXTRACTED_HEADERS_T *headers, uint32_t hash_key[4]) {
   uint32_t src_port;
