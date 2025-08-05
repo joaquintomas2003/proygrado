@@ -7,6 +7,8 @@
 #define MAX_INT_NODES 5
 #define IP_PROTO_UDP 0x11
 #define IP_PROTO_TCP 0x6
+#define NUM_RINGS 8
+#define RING_SIZE (1 << 16)
 
 typedef struct int_metric_sample {
   uint32_t node_id; /* Node ID */
@@ -38,7 +40,20 @@ typedef struct bucket_list {
   struct bucket_entry entry[BUCKET_SIZE];
 } bucket_list;
 
+typedef struct ring_list {
+  struct bucket_entry entry[RING_SIZE];
+} ring_list;
+
+typedef struct ring_meta {
+  uint32_t write_pointer;
+  uint32_t read_pointer;
+  uint32_t full;
+} ring_meta;
+
 __export __emem bucket_list int_flowcache[FLOWCACHE_ROWS];
+
+__export __emem ring_list ring_buffer_G[NUM_RINGS];
+__export __emem ring_meta ring_G[NUM_RINGS];
 
 static __inline int _get_hash_key(EXTRACTED_HEADERS_T *headers, uint32_t hash_key[4]) {
   uint32_t src_port;
@@ -96,6 +111,16 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   void *node_metadata_ptrs[MAX_INT_NODES];
   volatile uint32_t hash_value;
 
+  uint64_t timestamp = UINT64_MAX;
+  uint32_t wp, rp, f;
+  uint32_t ring_index;
+  __xwrite uint32_t zero = 0;
+  __xwrite uint32_t key_reset[4] = {0, 0, 0, 0};
+  __addr40 __emem bucket_entry *lru_entry = 0;
+  __addr40 __emem bucket_entry *ring_entry = 0;
+  __addr40 __emem ring_meta *ring_info;
+  __xrw    ring_meta ring_meta_read;
+
   // Declare the metadata variables
   __lmem struct pif_header_scalars *scalars;
   __lmem struct pif_header_ingress__bitmap *bitmap;
@@ -125,11 +150,59 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
       entry->key[3] == hash_key[3])) {
       break;
     }
+    /* Keep track of the LRU bucket */
+    if (timestamp > entry->last_update_timestamp) {
+      timestamp = entry->last_update_timestamp;
+      lru_entry = entry;
+    }
   }
 
   // If we reached the end of the bucket without finding a match
   if (i == BUCKET_SIZE) {
-    return PIF_PLUGIN_RETURN_FORWARD;
+    ring_index = hash_value & (NUM_RINGS - 1);
+    ring_info = &ring_G[ring_index];
+
+    mem_read_atomic(&ring_meta_read, ring_info, sizeof(ring_meta_read));
+    wp = ring_meta_read.write_pointer;
+    rp = ring_meta_read.read_pointer;
+    f  = ring_meta_read.full;
+
+    if (f == 0) {
+      nodes_present = lru_entry->int_metric_info_value.node_count;
+      ring_entry = &ring_buffer_G[ring_index].entry[wp];
+
+      mem_write_atomic(&lru_entry->key, ring_entry->key, sizeof(lru_entry->key));
+      mem_write_atomic(&lru_entry->packet_count, ring_entry->packet_count, sizeof(lru_entry->packet_count));
+      mem_write_atomic(&timestamp, ring_entry->last_update_timestamp, sizeof(timestamp));
+      mem_write_atomic(&nodes_present, &ring_entry->int_metric_info_value.node_count, sizeof(nodes_present));
+      
+      for (k = 0 < k < nodes_present && k < MAX_INT_NODES; k++) {
+
+        mem_write_atomic(&lru_entry->int_metric_info_value.latest[k],
+                         &ring_entry->int_metric_info_value.latest[k],
+                         sizeof(lru_entry->int_metric_info_value.latest[k]));
+
+        mem_write_atomic(&lru_entry->int_metric_info_value.average[k],
+                         &ring_entry->int_metric_info_value.average[k],
+                         sizeof(lru_entry->int_metric_info_value.average[k]));
+      }
+      wp = (wp + 1) & (RING_SIZE - 1);
+      if(wp == rp){
+          f = 1;
+      }
+      /* Free the bucket on the hash table */
+      mem_write_atomic(&zero, lru_entry->packet_count, sizeof(zero));
+      mem_write_atomic(&key_reset, lru_entry->key, sizeof(key_reset));
+      /* We were on the last bucket, now we are on the free'd bucket*/
+      entry = lru_entry;
+
+    } else {
+      return PIF_PLUGIN_RETURN_FORWARD;
+    }
+    ring_meta_read.write_pointer = wp;
+    ring_meta_read.full          = f;
+    ring_meta_read.read_pointer  = rp;
+    mem_write_atomic(&ring_meta_read, ring_info, sizeof(ring_meta_read));
   }
 
   // Metadata pointers for nodes
