@@ -111,6 +111,24 @@ static __inline __addr40 __emem bucket_entry* get_ring_buffer(uint32_t index) {
   }
 }
 
+static __inline int find_lru_entry_index(__addr40 __emem bucket_list *row) {
+  __xread uint64_t timestamp;
+  uint64_t oldest_timestamp = ~0ull;  // max uint64_t
+  int lru_index = 0;
+  int i;
+
+  for (i = 0; i < BUCKET_SIZE; i++) {
+    mem_read_atomic(&timestamp, &row->entry[i].last_update_timestamp, sizeof(timestamp));
+
+    if (timestamp < oldest_timestamp) {
+      oldest_timestamp = timestamp;
+      lru_index = i;
+    }
+  }
+
+  return lru_index;
+}
+
 // Writes a sample from node metadata to a given destination in the entry
 static __inline void _write_node_sample(__xwrite int_metric_sample *sample,
                                         __addr40 void *dest,
