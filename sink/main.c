@@ -59,6 +59,9 @@ __export __emem bucket_entry event_ring_buffer6[RING_BUFFER_ENTRIES];
 __export __emem bucket_entry event_ring_buffer7[RING_BUFFER_ENTRIES];
 __export __emem bucket_entry event_ring_buffer8[RING_BUFFER_ENTRIES];
 
+__export __emem uint32_t general_ring_write_ptrs[8] = {0};
+__export __emem uint32_t event_ring_write_ptrs[8] = {0};
+
 static __inline int _get_hash_key(EXTRACTED_HEADERS_T *headers, uint32_t hash_key[4]) {
   uint32_t src_port;
   uint32_t dst_port;
