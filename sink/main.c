@@ -3,7 +3,7 @@
 #include <std/hash.h>
 
 #define FLOWCACHE_ROWS (1 << 18)
-#define BUCKET_SIZE 12
+#define BUCKET_SIZE 6
 #define MAX_INT_NODES 5
 #define IP_PROTO_UDP 0x11
 #define IP_PROTO_TCP 0x6
