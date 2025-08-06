@@ -89,6 +89,25 @@ static __inline int _get_hash_key(EXTRACTED_HEADERS_T *headers, uint32_t hash_ke
   return 0;
 }
 
+static __inline int _get_ring_buffer_index(uint32_t hash_value) {
+  // Calculate the ring buffer index based on the hash value
+  return hash_value % RING_BUFFER_ENTRIES;
+}
+
+static __inline __addr40 __emem bucket_entry* get_ring_buffer(uint32_t index) {
+  switch (index) {
+    case 0: return general_ring_buffer1;
+    case 1: return general_ring_buffer2;
+    case 2: return general_ring_buffer3;
+    case 3: return general_ring_buffer4;
+    case 4: return general_ring_buffer5;
+    case 5: return general_ring_buffer6;
+    case 6: return general_ring_buffer7;
+    case 7: return general_ring_buffer8;
+    default: return general_ring_buffer1;
+  }
+}
+
 // Writes a sample from node metadata to a given destination in the entry
 static __inline void _write_node_sample(__xwrite int_metric_sample *sample,
                                         __addr40 void *dest,
