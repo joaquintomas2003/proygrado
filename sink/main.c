@@ -188,7 +188,24 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
 
   // If we reached the end of the bucket without finding a match
   if (i == BUCKET_SIZE) {
-    return PIF_PLUGIN_RETURN_FORWARD;
+    __addr40 __emem bucket_list *row = &int_flowcache[hash_value];
+    int lru_index = find_lru_entry_index(row);
+    __addr40 __emem bucket_entry *victim = &row->entry[lru_index];
+
+    // Hash-based selection of one of the 8 ring buffers
+    int ring_buffer_index = _get_ring_buffer_index(hash_value);
+    __addr40 __emem bucket_entry *ring = get_ring_buffer(ring_buffer_index);
+
+    // Atomically fetch and increment the write index
+    uint32_t write_index = mem_atomic_add32(&general_ring_write_ptrs[ring_buffer_index], 1) % RING_BUFFER_ENTRIES;
+
+    // Copy the victim into the ring buffer slot
+    __xread bucket_entry victim_copy;
+    mem_read_atomic(&victim_copy, victim, sizeof(bucket_entry));
+    __memcpy(&ring[write_index], &victim_copy, sizeof(bucket_entry));
+
+    // Reuse the victim slot in the cache
+    entry = victim;
   }
 
   // Metadata pointers for nodes
