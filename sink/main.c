@@ -197,12 +197,12 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
     __addr40 __emem bucket_entry *ring = get_ring_buffer(ring_buffer_index);
 
     // Atomically fetch and increment the write index
-    uint32_t write_index = mem_atomic_add32(&general_ring_write_ptrs[ring_buffer_index], 1) % RING_BUFFER_ENTRIES;
+    uint32_t write_ptr = mem_incr32(&general_ring_write_ptrs[ring_buffer_index]);
+    uint32_t ring_index = write_ptr % RING_BUFFER_ENTRIES;
+    __addr40 __emem bucket_entry *ring_entry = &ring[ring_index];
 
-    // Copy the victim into the ring buffer slot
-    __xread bucket_entry victim_copy;
-    mem_read_atomic(&victim_copy, victim, sizeof(bucket_entry));
-    __memcpy(&ring[write_index], &victim_copy, sizeof(bucket_entry));
+    // Write the victim entry to the ring buffer
+    mem_write_atomic(entry, ring_entry, sizeof(bucket_entry));
 
     // Reuse the victim slot in the cache
     entry = victim;
