@@ -3,6 +3,7 @@ import os
 import random
 import struct
 import yaml
+import ipaddress
 
 # CONFIG
 OUTPUT_PCAP = "int_r3_capture.pcap"
@@ -96,11 +97,11 @@ def build_metadata_stack(hops, instruction_bitmap):
     return b"".join(generate_metadata_for_hop(h, instruction_bitmap) for h in hops)
 
 
-def generate_int_packet(i, config, instruction_bitmap):
-    eth = Ether(src=SRC_MAC, dst=DST_MAC)
-    ip = IP(src=SRC_IP, dst=DST_IP)
-    udp = UDP(sport=random.randint(1024, 65535), dport=config["int_udp_dst_port"])
-    tcp = TCP(sport=SRC_PORT, dport=DST_PORT, seq=i)
+def generate_int_packet(i, config, instruction_bitmap, flow):
+    eth = Ether(src=flow["src_mac"], dst=flow["dst_mac"])
+    ip = IP(src=flow["src_ip"], dst=flow["dst_ip"])
+    udp = UDP(sport=flow["src_port"], dport=config["int_udp_dst_port"])
+    tcp = TCP(sport=flow["src_port"], dport=flow["dst_port"], seq=i)
     payload = Raw(config["payload"].encode())
 
     hop_ml = compute_hop_ml(instruction_bitmap)
@@ -110,10 +111,41 @@ def generate_int_packet(i, config, instruction_bitmap):
 
     return eth / ip / udp / Raw(shim + md_header + metadata) / tcp / payload
 
+def generate_flows(num_flows, base_src_ip, base_dst_ip, base_src_port, base_dst_port):
+    flows = []
+    for i in range(num_flows):
+        src_ip = str(ipaddress.IPv4Address(base_src_ip) + i)
+        dst_ip = str(ipaddress.IPv4Address(base_dst_ip) + i)
+        src_port = base_src_port + (i % (65535 - base_src_port))
+        dst_port = base_dst_port + (i % (65535 - base_dst_port))
+        flows.append({
+            "src_mac": SRC_MAC,
+            "dst_mac": DST_MAC,
+            "src_ip": src_ip,
+            "dst_ip": dst_ip,
+            "src_port": src_port,
+            "dst_port": dst_port
+        })
+    return flows
+
 def main():
     config = load_config()
     instruction_bitmap = build_instruction_bitmap(config.get("instruction_bits", []))
-    packets = [generate_int_packet(i, config, instruction_bitmap) for i in range(config["num_packets"])]
+
+    num_flows = config.get("num_flows", 10)
+    flows = generate_flows(
+        num_flows,
+        config.get("base_src_ip", SRC_IP),
+        config.get("base_dst_ip", DST_IP),
+        config.get("base_src_port", SRC_PORT),
+        config.get("base_dst_port", DST_PORT)
+    )
+
+    packets = []
+    for i in range(config["num_packets"]):
+        flow = random.choice(flows)
+        packets.append(generate_int_packet(i, config, instruction_bitmap, flow))
+
     parent_path = os.path.dirname(os.path.abspath(__file__))
     output_path = os.path.join(parent_path, "traces", config["output_pcap"])
     wrpcap(output_path, packets)

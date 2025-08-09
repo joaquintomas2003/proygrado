@@ -1,9 +1,14 @@
-num_packets: 1
+num_packets: 15
 output_pcap: "generated_int.pcap"
+
+int_udp_dst_port: 5000
+
+original_proto: 6  # TCP
+base_src_ip: "10.0.0.1"
+base_dst_ip: "10.0.0.18"
 src_port: 12345
 dst_port: 80
-int_udp_dst_port: 5000
-original_proto: 6  # TCP
+num_flows: 15
 
 hops:
   - 1
