@@ -111,7 +111,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   void *node_metadata_ptrs[MAX_INT_NODES];
   volatile uint32_t hash_value;
 
-  uint64_t timestamp = 0xFFFFFFFFFFFFFFFF;
+  __xrw uint64_t timestamp = 0xFFFFFFFFFFFFFFFF;
   uint32_t wp, rp, f;
   uint32_t ring_index;
   __xwrite uint32_t zero = 0;
@@ -120,6 +120,8 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   __addr40 __emem bucket_entry *ring_entry = 0;
   __addr40 __emem ring_meta *ring_info;
   __xrw    ring_meta ring_meta_read;
+  __xwrite uint32_t key_lru[4];
+  __xwrite uint32_t packet_count_lru;
 
   // Declare the metadata variables
   __lmem struct pif_header_scalars *scalars;
@@ -171,20 +173,30 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
       nodes_present = lru_entry->int_metric_info_value.node_count;
       ring_entry = &ring_buffer_G[ring_index].entry[wp];
 
-      mem_write_atomic(&lru_entry->key, &ring_entry->key, sizeof(lru_entry->key));
-      mem_write_atomic(&lru_entry->packet_count, &ring_entry->packet_count, sizeof(lru_entry->packet_count));
+      key_lru[0] = lru_entry->key[0];
+      key_lru[1] = lru_entry->key[1];
+      key_lru[2] = lru_entry->key[2];
+      key_lru[3] = lru_entry->key[3];
+      packet_count_lru = lru_entry->packet_count;
+
+      mem_write_atomic(key_lru, &ring_entry->key, sizeof(key_lru));
+      mem_write_atomic(&packet_count_lru, &ring_entry->packet_count, sizeof(packet_count_lru));
       mem_write_atomic(&timestamp, &ring_entry->last_update_timestamp, sizeof(timestamp));
       mem_write_atomic(&nodes_present, &ring_entry->int_metric_info_value.node_count, sizeof(nodes_present));
       
       for (k = 0; k < nodes_present && k < MAX_INT_NODES; k++) {
 
-        mem_write_atomic(&lru_entry->int_metric_info_value.latest[k],
-                         &ring_entry->int_metric_info_value.latest[k],
-                         sizeof(lru_entry->int_metric_info_value.latest[k]));
+        sample.node_id = lru_entry->int_metric_info_value.latest[k].node_id;
+        sample.hop_latency = lru_entry->int_metric_info_value.latest[k].hop_latency;
+        sample.queue_occupancy = lru_entry->int_metric_info_value.latest[k].queue_occupancy;
+        sample.egress_interface_tx = lru_entry->int_metric_info_value.latest[k].egress_interface_tx;
+        mem_write_atomic(&sample, &ring_entry->int_metric_info_value.latest[k], sizeof(sample));
 
-        mem_write_atomic(&lru_entry->int_metric_info_value.average[k],
-                         &ring_entry->int_metric_info_value.average[k],
-                         sizeof(lru_entry->int_metric_info_value.average[k]));
+        sample.node_id = lru_entry->int_metric_info_value.average[k].node_id;
+        sample.hop_latency = lru_entry->int_metric_info_value.average[k].hop_latency;
+        sample.queue_occupancy = lru_entry->int_metric_info_value.average[k].queue_occupancy;
+        sample.egress_interface_tx = lru_entry->int_metric_info_value.average[k].egress_interface_tx;
+        mem_write_atomic(&sample, &ring_entry->int_metric_info_value.average[k], sizeof(sample));
       }
       wp = (wp + 1) & (RING_SIZE - 1);
       if(wp == rp){
