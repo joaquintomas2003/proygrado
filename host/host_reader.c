@@ -47,6 +47,7 @@ typedef struct ring_meta {
     uint32_t write_pointer;
     uint32_t read_pointer;
     uint32_t full;
+    uint32_t _padding1; // Padding to ensure 16-byte alignment
 } ring_meta;
 
 int main() {
