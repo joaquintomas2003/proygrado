@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h> 
+#include <errno.h>
 #include <unistd.h>
 #include <time.h>
 
@@ -19,12 +19,12 @@ typedef struct int_metric_sample {
     uint32_t hop_latency;
     uint32_t queue_occupancy;
     uint32_t egress_interface_tx;
-} int_metric_sample; 
+} int_metric_sample;
 
 typedef struct int_metric_info {
-    int_metric_sample latest[MAX_INT_NODES];  
-    int_metric_sample average[MAX_INT_NODES]; 
-    uint32_t node_count;                      
+    int_metric_sample latest[MAX_INT_NODES];
+    int_metric_sample average[MAX_INT_NODES];
+    uint32_t node_count;
 } int_metric_info;
 
 // Explicit padding to match NFP's default layout, based on the NFP compiler's default padding rules:
@@ -33,7 +33,7 @@ typedef struct int_metric_info {
 typedef struct bucket_entry {
     uint32_t key[4];                       // 16 bytes
     uint32_t packet_count;                 // 4 bytes (Total 20 bytes so far)
-    uint32_t _padding1;          
+    uint32_t _padding1;
     uint64_t last_update_timestamp;        // 8 bytes (Total 20 + 4 + 8 = 32 bytes so far)
     int_metric_info int_metric_info_value; // 164 bytes (Total 32 + 164 = 196 bytes so far)
     uint32_t _padding2;                    // Tail padding to make total size 200 bytes (196 -> 200)
@@ -50,7 +50,7 @@ typedef struct ring_meta {
     uint32_t _padding1; // Padding to ensure 16-byte alignment
 } ring_meta;
 
-int main() {
+int main(int argc, char *argv[]) {
     struct nfp_device *h_nfp = NULL;
     struct nfp_cpp *h_cpp = NULL;
     const struct nfp_rtsym *rtsym_ring_buffer_G = NULL;
@@ -61,7 +61,15 @@ int main() {
 
     int ret = 0;
 
-    const int TARGET_RING_INDEX = 0;
+    int TARGET_RING_INDEX = 0;
+
+    if (argc > 1) {
+        TARGET_RING_INDEX = atoi(argv[1]) - 1;
+        if (TARGET_RING_INDEX < 0 || TARGET_RING_INDEX >= NUM_RINGS) {
+            fprintf(stderr, "Error: Target Ring Number must be between 0 < n < 9\n");
+            return 1;
+        }
+    }
 
     // 1. Open NFP device and get CPP handle
     h_nfp = nfp_device_open(0);
@@ -162,7 +170,7 @@ int main() {
         if (rp == wp && f == 0) {
             printf("\nRing %d is currently empty (WP=%u, RP=%u, Full=%u). Waiting for new data...\n",
                    TARGET_RING_INDEX + 1, wp, rp, f);
-            usleep(2000000); // Sleep for 2s before checking again
+            usleep(1000000); // Sleep for 1ms before checking again
             continue;
         }
 
@@ -203,13 +211,13 @@ int main() {
         // Write back the updated read_pointer and full flag to ring_meta
         current_ring_meta.read_pointer = rp;
         current_ring_meta.full = f;
-        if (nfp_cpp_area_write(area_ring_meta, 0, &current_ring_meta, sizeof(ring_meta)) < 0) { // [14]
+        if (nfp_cpp_area_write(area_ring_meta, 0, &current_ring_meta, sizeof(ring_meta)) < 0) {
             fprintf(stderr, "Error: Failed to write updated ring meta (%s)\n", strerror(errno));
             break;
         }
 
         printf(" Updated ring_meta: RP=%u, Full=%u.\n", current_ring_meta.read_pointer, current_ring_meta.full);
-        usleep(2000000); // Sleep for 2s before attempting to read the next entry
+        usleep(200000); // Sleep for 200ms before attempting to read the next entry
     }
 
 free_area_meta:
