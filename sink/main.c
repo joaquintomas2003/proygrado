@@ -10,6 +10,25 @@
 #define NUM_RINGS 8
 #define RING_SIZE (1 << 16)
 
+/* Event type bits */
+#define EVT_T_SWITCH  (1u << 0)
+#define EVT_C_SWITCH  (1u << 1)
+#define EVT_T_E2E     (1u << 2)
+#define EVT_C_E2E     (1u << 3)
+
+/* Metric id (packed in bits [8..15]) */
+#define METRIC_HOP     (0u << 8)
+#define METRIC_QUEUE   (1u << 8)
+#define METRIC_EGRESS  (2u << 8)
+
+/* Special switch_id for end-to-end events */
+#define E2E_SWITCH_ID  0xFFFFFFFFu
+
+__export __emem uint32_t THR_T_SWITCH[3]; /* [HOP, QUEUE, EGRESS] */
+__export __emem uint32_t THR_C_SWITCH[3]; /* change thresholds (|Δ|)    */
+__export __emem uint32_t THR_T_E2E_HOP;   /* end-to-end hop threshold    */
+__export __emem uint32_t THR_C_E2E_HOP;   /* end-to-end hop |Δ| threshold*/
+
 typedef struct int_metric_sample {
   uint32_t node_id; /* Node ID */
   // uint32_t ingress_and_egress_interface_id; /* Level 1 ingress interface ID */
