@@ -133,6 +133,24 @@ static __inline void _write_node_sample(__xwrite int_metric_sample *sample,
   mem_write_atomic(sample, dest, sizeof(*sample));
 }
 
+static __inline int _push_event_to_RI(uint32_t ring_index, __xwrite event_record *wr) {
+  __addr40 __emem ring_meta *ri_meta = &ring_I[ring_index];
+  __xrw ring_meta md;
+  __addr40 __emem event_record *slot;
+
+  mem_read_atomic(&md, ri_meta, sizeof(md));
+  if (md.full) return -1; /* drop if full (sized to avoid overflow per paper) */
+
+  slot = &ring_buffer_I[ring_index].entry[md.write_pointer];
+  mem_write_atomic(wr, slot, sizeof(*wr));
+
+  md.write_pointer = (md.write_pointer + 1) & (RING_SIZE - 1);
+  if (md.write_pointer == md.read_pointer) md.full = 1;
+
+  mem_write_atomic(&md, ri_meta, sizeof(md));
+  return 0;
+}
+
 int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_data) {
   // Declare the bucket entry variables
   __addr40 __emem bucket_entry *entry = 0;
