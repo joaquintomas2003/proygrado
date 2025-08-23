@@ -1,12 +1,16 @@
 // host_reader.c
-// Read Netronome ring buffers and push each entry to a Redis Stream.
+// Read Netronome ring buffers and/or push synthetic entries to a Redis Stream.
 // Build:
 //   gcc host_reader.c -o host_reader \
 //     -I/opt/netronome/include \
 //     -L/opt/netronome/lib \
 //     -lnfp -lhiredis
 //
-// Run:
+// Run (demo mode):
+//   ./host_reader --demo [RING_INDEX 1..8] [COUNT]
+//   (defaults: RING_INDEX=1, COUNT=100)
+//
+// Run (normal mode):
 //   ./host_reader [RING_INDEX 1..8]
 //
 // Environment (optional):
@@ -19,6 +23,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <stdint.h>
+#include <inttypes.h>
 
 #include <hiredis/hiredis.h>
 
@@ -196,9 +201,81 @@ static int xadd_bucket_entry(redisContext **ctx_ptr,
     return 0;
 }
 
+/* --------------- Demo helpers (synthetic entries) --------------- */
+
+static uint64_t now_mono_ns(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+}
+
+static void fill_synthetic_entry(bucket_entry *e, uint32_t seq) {
+    memset(e, 0, sizeof(*e));
+
+    /* Fake 4-tuple hash parts */
+    e->key[0] = 0x0a000001u;   // 10.0.0.1
+    e->key[1] = 0x0a000002u;   // 10.0.0.2
+    e->key[2] = 443u;          // dst port (example)
+    e->key[3] = 51820u;        // src port (example)
+
+    e->packet_count = 1000u + seq;
+    e->last_update_timestamp = now_mono_ns(); /* ns */
+    e->int_metric_info_value.node_count = MAX_INT_NODES;
+
+    for (uint32_t i = 0; i < MAX_INT_NODES; i++) {
+        e->int_metric_info_value.latest[i].node_id = i + 1;
+        e->int_metric_info_value.latest[i].hop_latency = 5 + (seq + i) % 50;        // 5..54
+        e->int_metric_info_value.latest[i].queue_occupancy = (seq * (i+1)) % 1000;  // 0..999
+        e->int_metric_info_value.latest[i].egress_interface_tx = 1000 + (i * 100) + (seq % 100);
+        /* average[] can be filled similarly if desired */
+    }
+}
+
 /* ---------------- Main Program ---------------- */
 
 int main(int argc, char *argv[]) {
+    /* Demo-mode parsing */
+    int demo_mode = 0;
+    int demo_ring_index = 0;  /* 0-based internally; printed as +1 */
+    uint32_t demo_count = 100;
+
+    if (argc >= 2 && strcmp(argv[1], "--demo") == 0) {
+        demo_mode = 1;
+        if (argc >= 3) {
+            int r = atoi(argv[2]) - 1;
+            if (r >= 0 && r < NUM_RINGS) demo_ring_index = r;
+        }
+        if (argc >= 4) {
+            uint32_t c = (uint32_t)strtoul(argv[3], NULL, 10);
+            if (c > 0) demo_count = c;
+        }
+    }
+
+    /* Connect to Redis (non-fatal if unavailable; we’ll retry) */
+    redisContext *redis = redis_connect_with_retry(500);
+    if (!redis || redis->err) {
+        fprintf(stderr, "Warning: Redis not available now, will keep trying while running.\n");
+    }
+
+    if (demo_mode) {
+        printf("Running in DEMO mode -> ring %d, count=%u\n", demo_ring_index + 1, demo_count);
+        for (uint32_t i = 0; i < demo_count; i++) {
+            bucket_entry e;
+            fill_synthetic_entry(&e, i);
+
+            if (xadd_bucket_entry(&redis, "int:ring", demo_ring_index, i & (RING_SIZE - 1), &e) == 0) {
+                printf(" [DEMO] Pushed synthetic entry #%u to Redis stream int:ring:%d\n", i, demo_ring_index);
+            } else {
+                fprintf(stderr, " [DEMO] Failed to push to Redis (will retry).\n");
+            }
+            usleep(200000); // ~200ms between demo entries
+        }
+        if (redis) redisFree(redis);
+        return 0;
+    }
+
+    /* -------- Normal (SmartNIC) mode below -------- */
+
     struct nfp_device *h_nfp = NULL;
     struct nfp_cpp *h_cpp = NULL;
     const struct nfp_rtsym *rtsym_ring_buffer_G = NULL;
@@ -215,12 +292,9 @@ int main(int argc, char *argv[]) {
             fprintf(stderr, "Error: Target Ring Number must be between 0 < n < 9\n");
             return 1;
         }
-    }
-
-    /* Connect to Redis (non-fatal if unavailable; we’ll retry) */
-    redisContext *redis = redis_connect_with_retry(500);
-    if (!redis || redis->err) {
-        fprintf(stderr, "Warning: Redis not available now, will keep trying while running.\n");
+    } else {
+        fprintf(stderr, "Usage: %s [RING_INDEX 1..8]  or  %s --demo [RING_INDEX] [COUNT]\n", argv[0], argv[0]);
+        return 1;
     }
 
     /* 1. Open NFP device and get CPP handle */
@@ -347,8 +421,8 @@ int main(int argc, char *argv[]) {
         uint64_t entry_last_update_timestamp = current_ring_entry.last_update_timestamp;
         uint32_t entry_node_count = current_ring_entry.int_metric_info_value.node_count;
 
-        printf(" Read Entry[RP=%u]: PacketCount=%u, Last Update Timestamp=%llu, NodeCount=%u\n",
-               rp, entry_packet_count, (unsigned long long)entry_last_update_timestamp, entry_node_count);
+        printf(" Read Entry[RP=%u]: PacketCount=%u, Last Update Timestamp=%" PRIu64 ", NodeCount=%u\n",
+               rp, entry_packet_count, entry_last_update_timestamp, entry_node_count);
 
         printf(" Entry[%u] Key Flow: [%u, %u, %u, %u]\n", rp,
                current_ring_entry.key[0],
