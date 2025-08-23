@@ -44,6 +44,18 @@ typedef struct ring_list {
   struct bucket_entry entry[RING_SIZE];
 } ring_list;
 
+typedef struct event_record {
+  uint32_t switch_id;     /* per-switch id, or 0xFFFFFFFF for E2E */
+  uint32_t value;         /* metric value that triggered the event */
+  uint32_t event_bitmap;  /* encodes type & metric (see defines below) */
+  uint64_t timestamp;     /* ingress TS (ns) */
+  uint32_t flow_key[4];
+} event_record;
+
+typedef struct event_ring_list {
+  struct event_record entry[RING_SIZE];
+} event_ring_list;
+
 typedef struct ring_meta {
   uint32_t write_pointer;
   uint32_t read_pointer;
@@ -54,6 +66,9 @@ __export __emem bucket_list int_flowcache[FLOWCACHE_ROWS];
 
 __export __emem ring_list ring_buffer_G[NUM_RINGS];
 __export __emem ring_meta ring_G[NUM_RINGS];
+
+__export __emem event_ring_list ring_buffer_I[NUM_RINGS];
+__export __emem ring_meta ring_I[NUM_RINGS];
 
 static __inline int _get_hash_key(EXTRACTED_HEADERS_T *headers, uint32_t hash_key[4]) {
   uint32_t src_port;
