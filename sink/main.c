@@ -11,10 +11,10 @@
 #define RING_SIZE (1 << 16)
 
 /* Event type bits */
-#define EVT_T_SWITCH  (1u << 0)
-#define EVT_C_SWITCH  (1u << 1)
-#define EVT_T_E2E     (1u << 2)
-#define EVT_C_E2E     (1u << 3)
+#define EVENT_T_SWITCH  (1u << 0)
+#define EVENT_C_SWITCH  (1u << 1)
+#define EVENT_T_E2E     (1u << 2)
+#define EVENT_C_E2E     (1u << 3)
 
 /* Metric id (packed in bits [8..15]) */
 #define METRIC_HOP     (0u << 8)
@@ -26,8 +26,8 @@
 
 __export __emem uint32_t THR_T_SWITCH[3] = {0, 0, 0};
 __export __emem uint32_t THR_C_SWITCH[3] = {0, 0, 0};
-__export __emem uint32_t THR_T_E2E_HOP   = 0;
-__export __emem uint32_t THR_C_E2E_HOP   = 0;
+__export __emem uint32_t THR_T_E2E[3] = {0, 0, 0};
+__export __emem uint32_t THR_C_E2E[3] = {0, 0, 0};
 
 typedef struct int_metric_sample {
   uint32_t node_id; /* Node ID */
@@ -328,7 +328,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
       _push_event_to_RI(ring_index_ev,
                         node->node_id,
                         node->hop_latency,
-                        EVT_T_SWITCH | metric_id,
+                        EVENT_T_SWITCH | metric_id,
                         (uint32_t)ingress_timestamp);
     }
     absdiff = (node->hop_latency > prev_latest.hop_latency)
@@ -338,7 +338,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
       _push_event_to_RI(ring_index_ev,
                         node->node_id,
                         absdiff,
-                        EVT_C_SWITCH | metric_id,
+                        EVENT_C_SWITCH | metric_id,
                         (uint32_t)ingress_timestamp);
     }
 
@@ -348,7 +348,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
       _push_event_to_RI(ring_index_ev,
                         node->node_id,
                         node->queue_occupancy,
-                        EVT_T_SWITCH | metric_id,
+                        EVENT_T_SWITCH | metric_id,
                         (uint32_t)ingress_timestamp);
     }
     absdiff = (node->queue_occupancy > prev_latest.queue_occupancy)
@@ -358,7 +358,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
       _push_event_to_RI(ring_index_ev,
                         node->node_id,
                         absdiff,
-                        EVT_C_SWITCH | metric_id,
+                        EVENT_C_SWITCH | metric_id,
                         (uint32_t)ingress_timestamp);
     }
 
@@ -368,7 +368,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
       _push_event_to_RI(ring_index_ev,
                         node->node_id,
                         node->egress_interface_tx,
-                        EVT_T_SWITCH | metric_id,
+                        EVENT_T_SWITCH | metric_id,
                         (uint32_t)ingress_timestamp);
     }
     absdiff = (node->egress_interface_tx > prev_latest.egress_interface_tx)
@@ -378,7 +378,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
       _push_event_to_RI(ring_index_ev,
                         node->node_id,
                         absdiff,
-                        EVT_C_SWITCH | metric_id,
+                        EVENT_C_SWITCH | metric_id,
                         (uint32_t)ingress_timestamp);
     }
 
@@ -409,22 +409,22 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   }
 
   /* === End-to-end hop-latency events (T/C) === */
-  if (e2e_curr_hop >= THR_T_E2E_HOP) {
+  if (e2e_curr_hop >= THR_T_E2E[0]) {
     _push_event_to_RI(ring_index_ev,
                         E2E_SWITCH_ID,
                         e2e_curr_hop,
-                        EVT_T_E2E | METRIC_HOP,
+                        EVENT_T_E2E | METRIC_HOP,
                         (uint32_t)ingress_timestamp);
   }
 
   absdiff = (e2e_curr_hop > e2e_prev_hop)
             ? (e2e_curr_hop - e2e_prev_hop)
             : (e2e_prev_hop - e2e_curr_hop);
-  if (absdiff >= THR_C_E2E_HOP) {
+  if (absdiff >= THR_C_E2E[0]) {
     _push_event_to_RI(ring_index_ev,
                         E2E_SWITCH_ID,
                         absdiff,
-                        EVT_C_E2E | METRIC_HOP,
+                        EVENT_C_E2E | METRIC_HOP,
                         (uint32_t)ingress_timestamp);
   }
 
