@@ -385,7 +385,6 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
     /* === Maintain end-to-end current hop sum as we go === */
     e2e_curr_hop += node->hop_latency;
 
-    /* === Now do your normal writes (unchanged) === */
     /* Write latest sample */
     sample.node_id = node->node_id;
     sample.hop_latency = node->hop_latency;
@@ -393,7 +392,6 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
     sample.egress_interface_tx = node->egress_interface_tx;
     mem_write_atomic(&sample, &entry->int_metric_info_value.latest[k], sizeof(sample));
 
-    /* Average as you already do */
     if (entry->packet_count > 1) {
       mem_read_atomic(&avg_sample, &entry->int_metric_info_value.average[k], sizeof(avg_sample));
 
