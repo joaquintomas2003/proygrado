@@ -22,7 +22,7 @@
 #define METRIC_EGRESS  (2u << 8)
 
 /* Special switch_id for end-to-end events */
-#define E2E_SWITCH_ID  0xFFFFFFFFu
+#define E2E_SWITCH_ID  0xFFFFFFFF
 
 __export __emem uint32_t THR_T_SWITCH[3] = {0, 0, 0};
 __export __emem uint32_t THR_C_SWITCH[3] = {0, 0, 0};
