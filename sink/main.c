@@ -405,27 +405,27 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
       mem_write_atomic(&sample, &entry->int_metric_info_value.average[k], sizeof(sample));
     }
   }
-
-  /* === End-to-end hop-latency events (T/C) === */
-  if (e2e_curr_hop >= THR_T_E2E[0]) {
-    _push_event_to_RI(ring_index_ev,
-                        E2E_SWITCH_ID,
-                        e2e_curr_hop,
-                        EVENT_T_E2E | METRIC_HOP,
-                        (uint32_t)ingress_timestamp);
-  }
-
-  absdiff = (e2e_curr_hop > e2e_prev_hop)
-            ? (e2e_curr_hop - e2e_prev_hop)
-            : (e2e_prev_hop - e2e_curr_hop);
-  if (absdiff >= THR_C_E2E[0]) {
-    _push_event_to_RI(ring_index_ev,
-                        E2E_SWITCH_ID,
-                        absdiff,
-                        EVENT_C_E2E | METRIC_HOP,
-                        (uint32_t)ingress_timestamp);
-  }
-
+  //
+  // /* === End-to-end hop-latency events (T/C) === */
+  // if (e2e_curr_hop >= THR_T_E2E[0]) {
+  //   _push_event_to_RI(ring_index_ev,
+  //                       E2E_SWITCH_ID,
+  //                       e2e_curr_hop,
+  //                       EVENT_T_E2E | METRIC_HOP,
+  //                       (uint32_t)ingress_timestamp);
+  // }
+  //
+  // absdiff = (e2e_curr_hop > e2e_prev_hop)
+  //           ? (e2e_curr_hop - e2e_prev_hop)
+  //           : (e2e_prev_hop - e2e_curr_hop);
+  // if (absdiff >= THR_C_E2E[0]) {
+  //   _push_event_to_RI(ring_index_ev,
+  //                       E2E_SWITCH_ID,
+  //                       absdiff,
+  //                       EVENT_C_E2E | METRIC_HOP,
+  //                       (uint32_t)ingress_timestamp);
+  // }
+  //
   // /* === End-to-end queue-occupancy events (T/C) === */
   // if (e2e_curr_hop >= THR_T_E2E[1]) {
   //   _push_event_to_RI(ring_index_ev,
