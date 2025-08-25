@@ -322,25 +322,25 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
     /* Read previous latest BEFORE overwriting, for C-events */
     mem_read_atomic(&prev_latest, &entry->int_metric_info_value.latest[k], sizeof(prev_latest));
 
-    /* === Per-switch events on HOP === */
-    metric_id = METRIC_HOP;
-    if (node->hop_latency >= THR_T_SWITCH[0]) {
-      _push_event_to_RI(ring_index_ev,
-                        node->node_id,
-                        node->hop_latency,
-                        EVENT_T_SWITCH | metric_id,
-                        (uint32_t)ingress_timestamp);
-    }
-    absdiff = (node->hop_latency > prev_latest.hop_latency)
-              ? (node->hop_latency - prev_latest.hop_latency)
-              : (prev_latest.hop_latency - node->hop_latency);
-    if (absdiff >= THR_C_SWITCH[0]) {
-      _push_event_to_RI(ring_index_ev,
-                        node->node_id,
-                        absdiff,
-                        EVENT_C_SWITCH | metric_id,
-                        (uint32_t)ingress_timestamp);
-    }
+    // /* === Per-switch events on HOP === */
+    // metric_id = METRIC_HOP;
+    // if (node->hop_latency >= THR_T_SWITCH[0]) {
+    //   _push_event_to_RI(ring_index_ev,
+    //                     node->node_id,
+    //                     node->hop_latency,
+    //                     EVENT_T_SWITCH | metric_id,
+    //                     (uint32_t)ingress_timestamp);
+    // }
+    // absdiff = (node->hop_latency > prev_latest.hop_latency)
+    //           ? (node->hop_latency - prev_latest.hop_latency)
+    //           : (prev_latest.hop_latency - node->hop_latency);
+    // if (absdiff >= THR_C_SWITCH[0]) {
+    //   _push_event_to_RI(ring_index_ev,
+    //                     node->node_id,
+    //                     absdiff,
+    //                     EVENT_C_SWITCH | metric_id,
+    //                     (uint32_t)ingress_timestamp);
+    // }
 
     /* === Per-switch events on QUEUE === */
     metric_id = METRIC_QUEUE;
