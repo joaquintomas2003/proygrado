@@ -426,45 +426,45 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
                         (uint32_t)ingress_timestamp);
   }
 
-  /* === End-to-end queue-occupancy events (T/C) === */
-  if (e2e_curr_hop >= THR_T_E2E[1]) {
-    _push_event_to_RI(ring_index_ev,
-                        E2E_SWITCH_ID,
-                        e2e_curr_hop,
-                        EVENT_T_E2E | METRIC_QUEUE,
-                        (uint32_t)ingress_timestamp);
-  }
-
-  absdiff = (e2e_curr_hop > e2e_prev_hop)
-            ? (e2e_curr_hop - e2e_prev_hop)
-            : (e2e_prev_hop - e2e_curr_hop);
-  if (absdiff >= THR_C_E2E[1]) {
-    _push_event_to_RI(ring_index_ev,
-                        E2E_SWITCH_ID,
-                        absdiff,
-                        EVENT_C_E2E | METRIC_QUEUE,
-                        (uint32_t)ingress_timestamp);
-  }
-
-  /* === End-to-end egress-link-utilization events (T/C) === */
-  if (e2e_curr_hop >= THR_T_E2E[2]) {
-    _push_event_to_RI(ring_index_ev,
-                        E2E_SWITCH_ID,
-                        e2e_curr_hop,
-                        EVENT_T_E2E | METRIC_EGRESS,
-                        (uint32_t)ingress_timestamp);
-  }
-
-  absdiff = (e2e_curr_hop > e2e_prev_hop)
-            ? (e2e_curr_hop - e2e_prev_hop)
-            : (e2e_prev_hop - e2e_curr_hop);
-  if (absdiff >= THR_C_E2E[2]) {
-    _push_event_to_RI(ring_index_ev,
-                        E2E_SWITCH_ID,
-                        absdiff,
-                        EVENT_C_E2E | METRIC_EGRESS,
-                        (uint32_t)ingress_timestamp);
-  }
-
+  // /* === End-to-end queue-occupancy events (T/C) === */
+  // if (e2e_curr_hop >= THR_T_E2E[1]) {
+  //   _push_event_to_RI(ring_index_ev,
+  //                       E2E_SWITCH_ID,
+  //                       e2e_curr_hop,
+  //                       EVENT_T_E2E | METRIC_QUEUE,
+  //                       (uint32_t)ingress_timestamp);
+  // }
+  //
+  // absdiff = (e2e_curr_hop > e2e_prev_hop)
+  //           ? (e2e_curr_hop - e2e_prev_hop)
+  //           : (e2e_prev_hop - e2e_curr_hop);
+  // if (absdiff >= THR_C_E2E[1]) {
+  //   _push_event_to_RI(ring_index_ev,
+  //                       E2E_SWITCH_ID,
+  //                       absdiff,
+  //                       EVENT_C_E2E | METRIC_QUEUE,
+  //                       (uint32_t)ingress_timestamp);
+  // }
+  //
+  // /* === End-to-end egress-link-utilization events (T/C) === */
+  // if (e2e_curr_hop >= THR_T_E2E[2]) {
+  //   _push_event_to_RI(ring_index_ev,
+  //                       E2E_SWITCH_ID,
+  //                       e2e_curr_hop,
+  //                       EVENT_T_E2E | METRIC_EGRESS,
+  //                       (uint32_t)ingress_timestamp);
+  // }
+  //
+  // absdiff = (e2e_curr_hop > e2e_prev_hop)
+  //           ? (e2e_curr_hop - e2e_prev_hop)
+  //           : (e2e_prev_hop - e2e_curr_hop);
+  // if (absdiff >= THR_C_E2E[2]) {
+  //   _push_event_to_RI(ring_index_ev,
+  //                       E2E_SWITCH_ID,
+  //                       absdiff,
+  //                       EVENT_C_E2E | METRIC_EGRESS,
+  //                       (uint32_t)ingress_timestamp);
+  // }
+  //
   return PIF_PLUGIN_RETURN_FORWARD;
 }
