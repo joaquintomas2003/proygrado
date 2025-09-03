@@ -10,6 +10,14 @@
 #define NUM_RINGS 8
 #define RING_SIZE (1 << 16)
 
+#define EVENT_T_SWITCH  (1u << 0)
+
+#define METRIC_HOP     (0u << 8)
+#define METRIC_QUEUE   (1u << 8)
+#define METRIC_EGRESS  (2u << 8)
+
+__export __emem uint32_t THR_T_SWITCH[3] = {0, 0, 0};
+
 typedef struct int_metric_sample {
   uint32_t node_id; /* Node ID */
   // uint32_t ingress_and_egress_interface_id; /* Level 1 ingress interface ID */
@@ -44,6 +52,17 @@ typedef struct ring_list {
   struct bucket_entry entry[RING_SIZE];
 } ring_list;
 
+typedef struct event_record {
+  uint32_t switch_id;     /* per-switch id, or 0xFFFFFFFF for E2E */
+  uint32_t value;         /* metric value or delta */
+  uint32_t event_bitmap;  /* encodes type & metric */
+  uint32_t ts_low32;      /* truncated timestamp (lower 32 bits) */
+} event_record;
+
+typedef struct event_ring_list {
+  struct event_record entry[RING_SIZE];
+} event_ring_list;
+
 typedef struct ring_meta {
   uint32_t write_pointer;
   uint32_t read_pointer;
@@ -54,6 +73,9 @@ __export __emem bucket_list int_flowcache[FLOWCACHE_ROWS];
 
 __export __emem ring_list ring_buffer_G[NUM_RINGS];
 __export __emem ring_meta ring_G[NUM_RINGS];
+
+__export __emem event_ring_list ring_buffer_I[NUM_RINGS];
+__export __emem ring_meta ring_I[NUM_RINGS];
 
 static __inline int _get_hash_key(EXTRACTED_HEADERS_T *headers, uint32_t hash_key[4]) {
   uint32_t src_port;
