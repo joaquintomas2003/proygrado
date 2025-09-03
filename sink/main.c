@@ -107,6 +107,36 @@ static __inline int _get_hash_key(EXTRACTED_HEADERS_T *headers, uint32_t hash_ke
   return 0;
 }
 
+static __inline int _push_event_to_RI(uint32_t ring_index,
+                                      uint32_t switch_id,
+                                      uint32_t value,
+                                      uint32_t event_bitmap,
+                                      uint32_t ts_low32) {
+  __addr40 __emem ring_meta *ri_meta = &ring_I[ring_index];
+  __addr40 __emem event_record *slot;
+
+  __xrw uint32_t md_buf[3]; /* [0]=wp, [1]=rp, [2]=full */
+
+  __xwrite uint32_t wr0[4];
+
+  mem_read_atomic(md_buf, ri_meta, sizeof(md_buf));
+  if (md_buf[2]) return -1; /* full */
+
+  slot = &ring_buffer_I[ring_index].entry[md_buf[0]];
+
+  wr0[0] = switch_id;
+  wr0[1] = value;
+  wr0[2] = event_bitmap;
+  wr0[3] = ts_low32;
+  mem_write_atomic(wr0, slot, sizeof(wr0));
+
+  md_buf[0] = (md_buf[0] + 1) & (RING_SIZE - 1);
+  if (md_buf[0] == md_buf[1]) md_buf[2] = 1;
+
+  mem_write_atomic(md_buf, ri_meta, sizeof(md_buf));
+  return 0;
+}
+
 // Writes a sample from node metadata to a given destination in the entry
 static __inline void _write_node_sample(__xwrite int_metric_sample *sample,
                                         __addr40 void *dest,
