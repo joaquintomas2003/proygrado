@@ -13,7 +13,6 @@ extern volatile int stop;
 void *event_ring_worker(void *arg) {
     thread_arg_t *targ = (thread_arg_t *)arg;
     int ring = targ->ring_index;
-    printf("Hi from thread for ring %d\n", ring + 1);
     while (!stop) {
         ring_meta current_ring_meta;
         memset(&current_ring_meta, 0, sizeof(ring_meta));

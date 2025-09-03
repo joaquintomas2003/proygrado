@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <zlib.h>
 #include <pthread.h>
+#include <getopt.h>
 
 #include "nfp.h"
 #include "nfp_cpp.h"
@@ -15,6 +16,7 @@
 #include "event_ring_worker.h"
 
 volatile int stop = 0;
+int debug = 0;
 
 void interrupt_handler(int dummy) {
     (void)dummy;
@@ -27,7 +29,19 @@ uint32_t hash_me_crc32(const uint32_t key[4]) {
     return (uint32_t)(crc & (FLOWCACHE_ROWS - 1));
 }
 
-int main() {
+int main(int argc, char *argv[]) {
+    int opt;
+    while ((opt = getopt(argc, argv, "D")) != -1) {
+        switch (opt) {
+            case 'D':
+                debug = 1;
+                break;
+            default:
+                fprintf(stderr, "Usage: %s [-D]    Enable debug mode (shows detailed output)\n", argv[0]);
+                exit(EXIT_FAILURE);
+        }
+    }
+
     struct nfp_device *h_nfp = NULL;
     struct nfp_cpp *h_cpp = NULL;
     const struct nfp_rtsym *rtsym_ring_buffer_G = NULL;
@@ -150,7 +164,6 @@ int main() {
 
     pthread_t threads_ring_I[NUM_RINGS];
     thread_arg_t args[NUM_RINGS];
-
     for (int i = 0; i < NUM_RINGS; i++) {
         args[i].ring_index = i;
         args[i].area_ring = area_rings_I[i];
@@ -164,7 +177,8 @@ int main() {
     }
     /**************************************************************************************************************************/
 
-    printf("Starting to read all Ring buffers.\n");
+    printf("Starting to read all Ring buffers\n");
+    if (debug) printf("\n----Debug mode is active - detailed output enabled----\n\n");
 
     unsigned long long loop_iteration = 0;
     while (!stop) {
@@ -180,11 +194,15 @@ int main() {
 
             uint32_t wp = current_ring_meta.write_pointer;
             uint32_t rp = current_ring_meta.read_pointer;
-            uint32_t f = current_ring_meta.full;
+            uint32_t full = current_ring_meta.full;
+            if (debug) {
+                printf("Ring %d - WP: %u, RP: %u, Full: %u\n", i + 1, wp, rp, full);
+            }
             int j = 0;
             for (j = 0; j < BATCH_SIZE; j++) {
 
-                if (rp == wp && f == 0) { break; }
+                /* Contrl if ring is empty */
+                if (rp == wp && !full) { break; }
 
                 bucket_entry current_ring_entry;
                 uint64_t offset_bucket_entry = (uint64_t)rp * sizeof(bucket_entry);
@@ -201,12 +219,13 @@ int main() {
                 hash_key[3] = current_ring_entry.key[3];
                 hash_value = hash_me_crc32(hash_key);
 
-                //  printf(" Entry[%u] Key Flow: [%u, %u, %u, %u]\n", rp,
-                //             current_ring_entry.key[0],
-                //             current_ring_entry.key[1],
-                //             current_ring_entry.key[2],
-                //             current_ring_entry.key[3]);
-
+                if (debug) {
+                    printf("  Entry[%u] Key Flow: [%u, %u, %u, %u]\n", rp,
+                            current_ring_entry.key[0],
+                            current_ring_entry.key[1],
+                            current_ring_entry.key[2],
+                            current_ring_entry.key[3]);
+                }
 
                 /* Linear probing */
                 int k = 0;
@@ -214,29 +233,28 @@ int main() {
                     k++;
                 }
                 memcpy(&int_flowcache[hash_value + k].entry[0], &current_ring_entry, sizeof(bucket_entry));
-                printf("Hop Latency: %u\n", int_flowcache[hash_value + k].entry[0].int_metric_info_value.average[0].hop_latency);
-                rp = (rp + 1) & (RING_SIZE - 1);
-                if (f == 1 && rp == wp) {
-                    f = 0;
-                } else if (f == 1 && rp != wp) {
-                    f = 0;
+                if (debug) {
+                    printf("  Hop Latency: %u | Queue Occupancy: %u\n\n", 
+                            int_flowcache[hash_value + k].entry[0].int_metric_info_value.average[0].hop_latency,
+                            int_flowcache[hash_value + k].entry[0].int_metric_info_value.average[0].queue_occupancy);
                 }
-                // usleep(300000);
+                rp = (rp + 1) & (RING_SIZE - 1);
+
+                if (debug) usleep(1000000); // Sleep for 1s
             }
             if (j > 0) {
-
+                if (full) { full = 0; }
                 current_ring_meta.read_pointer = rp;
-                current_ring_meta.full = f;
+                current_ring_meta.full = full;
                 if (nfp_cpp_area_write(area_ring_metas_G[i], 0, &current_ring_meta, sizeof(ring_meta)) < 0) {
                     fprintf(stderr, "Error: Failed to write updated ring meta for ring %d (%s)\n", i + 1, strerror(errno));
                     ret = 1;
                     goto exit_cleanup_areas;
                 }
             }
-
-            // printf("Processed %d entries from ring %d in iteration %llu\n", j, i + 1, loop_iteration);
+            if (debug) printf("  Processed %d entries from ring %d in iteration %llu\n\n", j, i + 1, loop_iteration);
         }
-        // usleep(2000000); // Sleep for 1s
+        if (debug) usleep(3000000); // Sleep for 3s
     }
 
     for (int i = 0; i < NUM_RINGS; i++) {
