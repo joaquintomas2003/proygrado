@@ -175,6 +175,9 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   __xwrite uint32_t key_lru[4];
   __xwrite uint32_t packet_count_lru;
 
+  uint32_t metric_id;
+  uint32_t ring_index_ev;
+
   // Declare the metadata variables
   __lmem struct pif_header_scalars *scalars;
   __lmem struct pif_header_ingress__bitmap *bitmap;
@@ -189,6 +192,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   // Calculate the hash value using CRC32
   hash_value = hash_me_crc32((void *) hash_key, sizeof(hash_key), 1);
   hash_value &= (FLOWCACHE_ROWS - 1);
+  ring_index_ev = hash_value & (NUM_RINGS - 1);
   bitmap = (__lmem struct pif_header_ingress__bitmap *) (headers + PIF_PARREP_ingress__bitmap_OFF_LW);
   scalars = (__lmem struct pif_header_scalars *) (headers + PIF_PARREP_scalars_OFF_LW);
   intrinsic_metadata = (__lmem struct pif_header_intrinsic_metadata *) (headers + PIF_PARREP_intrinsic_metadata_OFF_LW);
@@ -294,6 +298,36 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
 
   for (k = 0; k < nodes_present && k < MAX_INT_NODES; k++) {
     node = (__lmem struct pif_header_ingress__node1_metadata *)node_metadata_ptrs[k];
+
+    /* === Per-switch events on HOP === */
+    metric_id = METRIC_HOP;
+    if (node->hop_latency >= THR_T_SWITCH[0]) {
+      _push_event_to_RI(ring_index_ev,
+          node->node_id,
+          node->hop_latency,
+          EVENT_T_SWITCH | metric_id,
+          (uint32_t)ingress_timestamp);
+    }
+
+    /* === Per-switch events on QUEUE === */
+    metric_id = METRIC_QUEUE;
+    if (node->queue_occupancy >= THR_T_SWITCH[1]) {
+      _push_event_to_RI(ring_index_ev,
+          node->node_id,
+          node->queue_occupancy,
+          EVENT_T_SWITCH | metric_id,
+          (uint32_t)ingress_timestamp);
+    }
+
+    /* === Per-switch events on EGRESS link utilization === */
+    metric_id = METRIC_EGRESS;
+    if (node->egress_interface_tx >= THR_T_SWITCH[2]) {
+      _push_event_to_RI(ring_index_ev,
+          node->node_id,
+          node->egress_interface_tx,
+          EVENT_T_SWITCH | metric_id,
+          (uint32_t)ingress_timestamp);
+    }
 
     // Write latest sample
     sample.node_id = node->node_id;
