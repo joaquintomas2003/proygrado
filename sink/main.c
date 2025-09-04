@@ -115,6 +115,8 @@ static __inline int _push_event_to_RI(uint32_t ring_index,
   __addr40 __emem ring_meta *ri_meta = &ring_I[ring_index];
   __addr40 __emem event_record *slot;
 
+  uint32_t wp, rp, f;
+
   __xrw ring_meta md_buf; /* [0]=wp, [1]=rp, [2]=full */
 
   __xwrite uint32_t wr0[4];
