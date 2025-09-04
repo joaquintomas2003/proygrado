@@ -3,7 +3,7 @@
 #include <std/hash.h>
 
 #define FLOWCACHE_ROWS (1 << 18)
-#define BUCKET_SIZE 12
+#define BUCKET_SIZE 3
 #define MAX_INT_NODES 5
 #define IP_PROTO_UDP 0x11
 #define IP_PROTO_TCP 0x6
@@ -115,14 +115,14 @@ static __inline int _push_event_to_RI(uint32_t ring_index,
   __addr40 __emem ring_meta *ri_meta = &ring_I[ring_index];
   __addr40 __emem event_record *slot;
 
-  __xrw uint32_t md_buf[3]; /* [0]=wp, [1]=rp, [2]=full */
+  __xrw ring_meta md_buf; /* [0]=wp, [1]=rp, [2]=full */
 
   __xwrite uint32_t wr0[4];
 
-  mem_read_atomic(md_buf, ri_meta, sizeof(md_buf));
-  if (md_buf[2]) return -1; /* full */
+  mem_read_atomic(&md_buf, ri_meta, sizeof(md_buf));
+  if (md_buf.full) return -1; /* full */
 
-  slot = &ring_buffer_I[ring_index].entry[md_buf[0]];
+  slot = &ring_buffer_I[ring_index].entry[md_buf.write_pointer];
 
   wr0[0] = switch_id;
   wr0[1] = value;
@@ -130,10 +130,10 @@ static __inline int _push_event_to_RI(uint32_t ring_index,
   wr0[3] = ts_low32;
   mem_write_atomic(wr0, slot, sizeof(wr0));
 
-  md_buf[0] = (md_buf[0] + 1) & (RING_SIZE - 1);
-  if (md_buf[0] == md_buf[1]) md_buf[2] = 1;
+  md_buf.write_pointer = (md_buf.write_pointer + 1) & (RING_SIZE - 1);
+  if (md_buf.write_pointer == md_buf.read_pointer) md_buf.full = 1;
 
-  mem_write_atomic(md_buf, ri_meta, sizeof(md_buf));
+  mem_write_atomic(&md_buf, ri_meta, sizeof(md_buf));
   return 0;
 }
 
@@ -190,7 +190,8 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   }
 
   // Calculate the hash value using CRC32
-  hash_value = hash_me_crc32((void *) hash_key, sizeof(hash_key), 1);
+  hash_value = 0;
+  // hash_value = hash_me_crc32((void *) hash_key, sizeof(hash_key), 1);
   hash_value &= (FLOWCACHE_ROWS - 1);
   ring_index_ev = hash_value & (NUM_RINGS - 1);
   bitmap = (__lmem struct pif_header_ingress__bitmap *) (headers + PIF_PARREP_ingress__bitmap_OFF_LW);
@@ -263,7 +264,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
       mem_write_atomic(&key_reset, &lru_entry->key, sizeof(key_reset));
       /* We were on the last bucket, now we are on the free'd bucket*/
       entry = lru_entry;
-
+;
     } else {
       return PIF_PLUGIN_RETURN_FORWARD;
     }
@@ -303,10 +304,10 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
     metric_id = METRIC_HOP;
     if (node->hop_latency >= THR_T_SWITCH[0]) {
       _push_event_to_RI(ring_index_ev,
-          node->node_id,
-          node->hop_latency,
-          EVENT_T_SWITCH | metric_id,
-          (uint32_t)ingress_timestamp);
+          0xABCDABCD,
+          0xFFFFFFFF,
+          0xDEADDEAD,
+          0xCAFECAFE);
     }
 
     /* === Per-switch events on QUEUE === */
