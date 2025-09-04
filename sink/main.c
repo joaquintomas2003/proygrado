@@ -120,7 +120,11 @@ static __inline int _push_event_to_RI(uint32_t ring_index,
   __xwrite uint32_t wr0[4];
 
   mem_read_atomic(&md_buf, ri_meta, sizeof(md_buf));
-  if (md_buf.full) return -1; /* full */
+  wp = md_buf.write_pointer;
+  rp = md_buf.read_pointer;
+  f  = md_buf.full;
+
+  if (f) return -1; /* full */
 
   slot = &ring_buffer_I[ring_index].entry[md_buf.write_pointer];
 
@@ -130,8 +134,12 @@ static __inline int _push_event_to_RI(uint32_t ring_index,
   wr0[3] = ts_low32;
   mem_write_atomic(wr0, slot, sizeof(wr0));
 
-  md_buf.write_pointer = (md_buf.write_pointer + 1) & (RING_SIZE - 1);
-  if (md_buf.write_pointer == md_buf.read_pointer) md_buf.full = 1;
+  wp = (wp + 1) & (RING_SIZE - 1);
+  if (wp == rp) f = 1;
+
+  md_buf.write_pointer = wp;
+  md_buf.read_pointer = rp;
+  md_buf.full = f;
 
   mem_write_atomic(&md_buf, ri_meta, sizeof(md_buf));
   return 0;
@@ -152,8 +160,6 @@ static __inline void _write_node_sample(__xwrite int_metric_sample *sample,
 }
 
 int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_data) {
-  memset(ring_I, 0, sizeof(ring_I));
-
   // Declare the bucket entry variables
   __addr40 __emem bucket_entry *entry = 0;
   __xrw int_metric_sample avg_sample;
