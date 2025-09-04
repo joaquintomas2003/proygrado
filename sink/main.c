@@ -131,7 +131,8 @@ static __inline int _push_event_to_RI(uint32_t ring_index,
   mem_write_atomic(wr0, slot, sizeof(wr0));
 
   md_buf.write_pointer = (md_buf.write_pointer + 1) & (RING_SIZE - 1);
-  if (md_buf.write_pointer == md_buf.read_pointer) md_buf.full = 5;
+  md_buf.read_pointer = 0;
+  if (md_buf.write_pointer == md_buf.read_pointer) md_buf.full = 1;
 
   mem_write_atomic(&md_buf, ri_meta, sizeof(md_buf));
   return 0;
