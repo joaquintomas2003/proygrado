@@ -309,26 +309,26 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
           0xDEADDEAD,
           0xCAFECAFE);
     }
-
-    /* === Per-switch events on QUEUE === */
-    metric_id = METRIC_QUEUE;
-    if (node->queue_occupancy >= THR_T_SWITCH[1]) {
-      _push_event_to_RI(ring_index_ev,
-          node->node_id,
-          node->queue_occupancy,
-          EVENT_T_SWITCH | metric_id,
-          (uint32_t)ingress_timestamp);
-    }
-
-    /* === Per-switch events on EGRESS link utilization === */
-    metric_id = METRIC_EGRESS;
-    if (node->egress_interface_tx >= THR_T_SWITCH[2]) {
-      _push_event_to_RI(ring_index_ev,
-          node->node_id,
-          node->egress_interface_tx,
-          EVENT_T_SWITCH | metric_id,
-          (uint32_t)ingress_timestamp);
-    }
+    //
+    // /* === Per-switch events on QUEUE === */
+    // metric_id = METRIC_QUEUE;
+    // if (node->queue_occupancy >= THR_T_SWITCH[1]) {
+    //   _push_event_to_RI(ring_index_ev,
+    //       node->node_id,
+    //       node->queue_occupancy,
+    //       EVENT_T_SWITCH | metric_id,
+    //       (uint32_t)ingress_timestamp);
+    // }
+    //
+    // /* === Per-switch events on EGRESS link utilization === */
+    // metric_id = METRIC_EGRESS;
+    // if (node->egress_interface_tx >= THR_T_SWITCH[2]) {
+    //   _push_event_to_RI(ring_index_ev,
+    //       node->node_id,
+    //       node->egress_interface_tx,
+    //       EVENT_T_SWITCH | metric_id,
+    //       (uint32_t)ingress_timestamp);
+    // }
 
     // Write latest sample
     sample.node_id = node->node_id;
