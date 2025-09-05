@@ -126,14 +126,20 @@ static __inline int _push_event_to_RI(uint32_t ring_index,
   __addr40 __emem ring_meta *ri_meta = &ring_I[ring_index];
   __addr40 __emem event_record *slot;
 
-  __xrw uint32_t md_buf[3]; /* [0]=wp, [1]=rp, [2]=full */
+  uint32_t wp, rp, f;
+
+  __xrw ring_meta md_buf; /* [0]=wp, [1]=rp, [2]=full */
 
   __xwrite uint32_t wr0[4];
 
-  mem_read_atomic(md_buf, ri_meta, sizeof(md_buf));
-  if (md_buf[2]) return -1; /* full */
+  mem_read_atomic(&md_buf, ri_meta, sizeof(md_buf));
+  wp = md_buf.write_pointer;
+  rp = md_buf.read_pointer;
+  f  = md_buf.full;
 
-  slot = &ring_buffer_I[ring_index].entry[md_buf[0]];
+  if (f) return -1; /* full */
+
+  slot = &ring_buffer_I[ring_index].entry[md_buf.write_pointer];
 
   wr0[0] = switch_id;
   wr0[1] = value;
@@ -141,10 +147,14 @@ static __inline int _push_event_to_RI(uint32_t ring_index,
   wr0[3] = ts_low32;
   mem_write_atomic(wr0, slot, sizeof(wr0));
 
-  md_buf[0] = (md_buf[0] + 1) & (RING_SIZE - 1);
-  if (md_buf[0] == md_buf[1]) md_buf[2] = 1;
+  wp = (wp + 1) & (RING_SIZE - 1);
+  if (wp == rp) f = 1;
 
-  mem_write_atomic(md_buf, ri_meta, sizeof(md_buf));
+  md_buf.write_pointer = wp;
+  md_buf.read_pointer = rp;
+  md_buf.full = f;
+
+  mem_write_atomic(&md_buf, ri_meta, sizeof(md_buf));
   return 0;
 }
 
