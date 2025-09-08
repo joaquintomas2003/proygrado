@@ -67,7 +67,7 @@ typedef struct event_record {
   uint32_t switch_id;     /* per-switch id, or 0xFFFFFFFF for E2E */
   uint32_t value;         /* metric value or delta */
   uint32_t event_bitmap;  /* encodes type & metric */
-  uint32_t ts_low32;      /* truncated timestamp (lower 32 bits) */
+  uint64_t timestamp;
 } event_record;
 
 typedef struct event_ring_list {
@@ -122,7 +122,7 @@ static __inline int _push_event_to_RI(uint32_t ring_index,
                                       uint32_t switch_id,
                                       uint32_t value,
                                       uint32_t event_bitmap,
-                                      uint32_t ts_low32) {
+                                      uint64_t timestamp) {
   __addr40 __emem ring_meta *ri_meta = &ring_I[ring_index];
   __addr40 __emem event_record *slot;
 
@@ -130,7 +130,7 @@ static __inline int _push_event_to_RI(uint32_t ring_index,
 
   __xrw ring_meta md_buf; /* [0]=wp, [1]=rp, [2]=full */
 
-  __xwrite uint32_t wr0[4];
+  __xwrite uint32_t wr0[5];
 
   mem_read_atomic(&md_buf, ri_meta, sizeof(md_buf));
   wp = md_buf.write_pointer;
@@ -144,7 +144,8 @@ static __inline int _push_event_to_RI(uint32_t ring_index,
   wr0[0] = switch_id;
   wr0[1] = value;
   wr0[2] = event_bitmap;
-  wr0[3] = ts_low32;
+  wr0[3] = (uint32_t)(timestamp & 0xFFFFFFFF);
+  wr0[4] = (uint32_t)((timestamp >> 32) & 0xFFFFFFFF);
   mem_write_atomic(wr0, slot, sizeof(wr0));
 
   wp = (wp + 1) & (RING_SIZE - 1);
@@ -338,7 +339,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
                         node->node_id,
                         node->hop_latency,
                         EVENT_T_SWITCH | metric_id,
-                        (uint32_t)ingress_timestamp);
+                        ingress_timestamp);
     }
     absdiff = (node->hop_latency > prev_latest.hop_latency)
               ? (node->hop_latency - prev_latest.hop_latency)
@@ -348,7 +349,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
                         node->node_id,
                         absdiff,
                         EVENT_C_SWITCH | metric_id,
-                        (uint32_t)ingress_timestamp);
+                        ingress_timestamp);
     }
 
     /* === Per-switch events on QUEUE === */
@@ -358,7 +359,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
                         node->node_id,
                         node->queue_occupancy,
                         EVENT_T_SWITCH | metric_id,
-                        (uint32_t)ingress_timestamp);
+                        ingress_timestamp);
     }
     absdiff = (node->queue_occupancy > prev_latest.queue_occupancy)
               ? (node->queue_occupancy - prev_latest.queue_occupancy)
@@ -368,7 +369,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
                         node->node_id,
                         absdiff,
                         EVENT_C_SWITCH | metric_id,
-                        (uint32_t)ingress_timestamp);
+                        ingress_timestamp);
     }
 
     /* === Per-switch events on EGRESS link utilization === */
@@ -378,7 +379,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
                         node->node_id,
                         node->egress_interface_tx,
                         EVENT_T_SWITCH | metric_id,
-                        (uint32_t)ingress_timestamp);
+                        ingress_timestamp);
     }
     absdiff = (node->egress_interface_tx > prev_latest.egress_interface_tx)
               ? (node->egress_interface_tx - prev_latest.egress_interface_tx)
@@ -388,7 +389,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
                         node->node_id,
                         absdiff,
                         EVENT_C_SWITCH | metric_id,
-                        (uint32_t)ingress_timestamp);
+                        ingress_timestamp);
     }
 
     /* === Maintain end-to-end current hop sum as we go === */
@@ -421,7 +422,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
                         E2E_SWITCH_ID,
                         e2e_curr_hop,
                         EVENT_T_E2E | METRIC_HOP,
-                        (uint32_t)ingress_timestamp);
+                        ingress_timestamp);
   }
 
   absdiff = (e2e_curr_hop > e2e_prev_hop)
@@ -432,7 +433,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
                         E2E_SWITCH_ID,
                         absdiff,
                         EVENT_C_E2E | METRIC_HOP,
-                        (uint32_t)ingress_timestamp);
+                        ingress_timestamp);
   }
 
   /* === End-to-end queue-occupancy events (T/C) === */
@@ -441,7 +442,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
                         E2E_SWITCH_ID,
                         e2e_curr_hop,
                         EVENT_T_E2E | METRIC_QUEUE,
-                        (uint32_t)ingress_timestamp);
+                        ingress_timestamp);
   }
 
   absdiff = (e2e_curr_hop > e2e_prev_hop)
@@ -452,7 +453,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
                         E2E_SWITCH_ID,
                         absdiff,
                         EVENT_C_E2E | METRIC_QUEUE,
-                        (uint32_t)ingress_timestamp);
+                        ingress_timestamp);
   }
 
   /* === End-to-end egress-link-utilization events (T/C) === */
@@ -461,7 +462,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
                         E2E_SWITCH_ID,
                         e2e_curr_hop,
                         EVENT_T_E2E | METRIC_EGRESS,
-                        (uint32_t)ingress_timestamp);
+                        ingress_timestamp);
   }
 
   absdiff = (e2e_curr_hop > e2e_prev_hop)
@@ -472,7 +473,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
                         E2E_SWITCH_ID,
                         absdiff,
                         EVENT_C_E2E | METRIC_EGRESS,
-                        (uint32_t)ingress_timestamp);
+                        ingress_timestamp);
   }
 
   return PIF_PLUGIN_RETURN_FORWARD;
