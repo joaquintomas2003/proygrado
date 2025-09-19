@@ -10,6 +10,7 @@ CWD="$(pwd)"
 # Allow overriding output paths via environment variables
 FIRMWARE_PATH="${FIRMWARE_PATH:-$CWD/out/firmware.nffw}"
 PIF_JSON_PATH="${PIF_JSON_PATH:-$CWD/pifout/pif_design.json}"
+DUMMY_ME_FIRMWARE_PATH="${DUMMY_ME_FIRMWARE_PATH:-$CWD/out/firmware_dummy.nffw}"
 
 # Allow configuring rtecli connection details
 RTE_HOST="${RTE_HOST:-localhost}"
@@ -50,9 +51,21 @@ case "$COMMAND" in
       --include /opt/netronome/p4/components/flowcache/me/lib/flowcache \
       -4 "$P4_FILE" \
       --nfirc_mac_ingress_timestamp \
-      -c main.c me_dummy.c \
+      -c main.c \
       -A 52 \
       "${EXTRA_ARGS[@]}"
+
+    /opt/netronome/p4/bin/nfp4build \
+      -c me_dummy.c \
+      -o "$DUMMY_ME_FIRMWARE_PATH" \
+      -p pifout \
+      -l lithium \
+      -A 1 \
+      --verbose-generate \
+      --verbose-build \
+      --no-debug-info \
+      --custom-load-list custom_me.list \
+      --custom-load-me i32.me0 \
 
     echo -e "${GREEN}✅ Compilation complete: $FIRMWARE_PATH${NC}"
     ;;
