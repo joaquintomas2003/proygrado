@@ -39,6 +39,13 @@ case "$COMMAND" in
     mkdir -p "$(dirname "$FIRMWARE_PATH")" pifout
 
     /opt/netronome/p4/bin/nfp4build \
+      -c me_dummy.c \
+      -o me_dummy.nffw \
+      -p pifout_dummy \
+      -l lithium \
+      -b
+
+    /opt/netronome/p4/bin/nfp4build \
       --nfp4c_p4_version 16 \
       --no-debug-info \
       -p pifout \
@@ -50,8 +57,10 @@ case "$COMMAND" in
       --include /opt/netronome/p4/components/flowcache/me/lib/flowcache \
       -4 "$P4_FILE" \
       --nfirc_mac_ingress_timestamp \
-      -c main.c me_dummy.c \
+      -c main.c \
       -A 52 \
+      --custom-load-list custom_me.list \
+      --custom-load-me i32.me0
       "${EXTRA_ARGS[@]}"
 
     echo -e "${GREEN}✅ Compilation complete: $FIRMWARE_PATH${NC}"
