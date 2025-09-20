@@ -5,8 +5,11 @@
 
 #define FLOWCACHE_ROWS (1 << 18)
 #define BUCKET_SIZE 12
-#define RING_SIZE   (1 << 16)
-#define NUM_RINGS   8
+#define MAX_INT_NODES 5
+#define IP_PROTO_UDP 0x11
+#define IP_PROTO_TCP 0x6
+#define NUM_RINGS 8
+#define RING_SIZE (1 << 16)
 #define AGE_THRESHOLD_NS (1000000000ULL)  /* 1 second for testing */
 
 typedef struct int_metric_sample {
