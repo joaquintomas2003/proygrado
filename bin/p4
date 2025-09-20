@@ -38,7 +38,6 @@ case "$COMMAND" in
     echo -e "${GREEN}Compiling $P4_FILE with main.c...${NC}"
     mkdir -p "$(dirname "$FIRMWARE_PATH")" pifout
 
-
     /opt/netronome/p4/bin/nfp4build \
       --nfp4c_p4_version 16 \
       --no-debug-info \
@@ -53,7 +52,7 @@ case "$COMMAND" in
       --nfirc_mac_ingress_timestamp \
       -c main.c \
       -A 52 \
-      --custom-load-list custom_me.list \
+      --custom-load-list me_dummy.list \
       --custom-load-me i32.me0
       "${EXTRA_ARGS[@]}"
 
