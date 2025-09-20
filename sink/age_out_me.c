@@ -93,30 +93,6 @@ void main(void)
             mem_read64(&last_ts, &entry->last_update_timestamp, sizeof(last_ts));
 
             if (last_ts && (now - last_ts > AGE_THRESHOLD_NS)) {
-                ring_index = row & (NUM_RINGS - 1);
-                ring_info = &ring_G[ring_index];
-
-                mem_read_atomic(&md_buf, ring_info, sizeof(md_buf));
-                if (!md_buf.full) {
-                    ring_entry = &ring_buffer_G[ring_index].entry[md_buf.write_pointer];
-
-                    /* Copy entry into __xwrite buffer first */
-                    mem_read_atomic(&entry_buf, entry, sizeof(*entry));
-                    mem_write_atomic(&entry_buf, ring_entry, sizeof(*entry));
-
-                    /* Clear the original entry */
-                    zero32 = 0;
-                    mem_write_atomic(&zero32, &entry->packet_count, sizeof(zero32));
-                    zero64 = 0;
-                    mem_write_atomic(&zero64, &entry->last_update_timestamp, sizeof(zero64));
-
-                    /* Update ring metadata */
-                    md_buf.write_pointer = (md_buf.write_pointer + 1) & (RING_SIZE - 1);
-                    if (md_buf.write_pointer == md_buf.read_pointer)
-                        md_buf.full = 1;
-
-                    mem_write_atomic(&md_buf, ring_info, sizeof(md_buf));
-                }
             }
         }
 
