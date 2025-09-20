@@ -52,7 +52,8 @@ case "$COMMAND" in
       --nfirc_mac_ingress_timestamp \
       -c main.c \
       -A 52 \
-      --custom-load-me "i32.me0:me_dummy.obj"
+      --custom-load-list me_dummy.list \
+      --custom-load-me i32.me0
       "${EXTRA_ARGS[@]}"
 
     echo -e "${GREEN}✅ Compilation complete: $FIRMWARE_PATH${NC}"
