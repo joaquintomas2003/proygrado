@@ -4,9 +4,9 @@
 #include <nfp/me.h>
 
 /* exported variables in EMEM so host/tools/other MEs can inspect/modify */
-__export __mem40 volatile uint32_t latch = 0xFF;         /* wake/trigger latch */
-__export __mem40 volatile uint32_t timers = 0;           /* single-timer guard */
-__export __mem40 volatile uint32_t dummy_counter = 0;    /* counter to confirm ME runs */
+__export __mem40 uint32_t latch = 0xFF;         /* wake/trigger latch */
+__export __mem40 uint32_t timers = 0;           /* single-timer guard */
+__export __mem40 uint32_t dummy_counter = 0;    /* counter to confirm ME runs */
 
 /* how long to sleep between increments (ms) */
 #define INCREMENT_MS 1000

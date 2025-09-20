@@ -38,12 +38,6 @@ case "$COMMAND" in
     echo -e "${GREEN}Compiling $P4_FILE with main.c...${NC}"
     mkdir -p "$(dirname "$FIRMWARE_PATH")" pifout
 
-    /opt/netronome/p4/bin/nfp4build \
-      -c me_dummy.c \
-      -o me_dummy.nffw \
-      -p pifout_dummy \
-      -l lithium \
-      -b
 
     /opt/netronome/p4/bin/nfp4build \
       --nfp4c_p4_version 16 \
