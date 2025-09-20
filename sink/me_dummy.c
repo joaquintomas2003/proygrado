@@ -15,14 +15,31 @@ __export __mem40 uint32_t dummy_counter = 0;    /* counter to confirm ME runs */
 void timer_thread()
 {
   __xrw uint32_t xfer = 0xFF;
-  __xrw uint32_t tmp = 0;
+  __xrw uint32_t tmp;
   int i;
 
   while (1) {
-    // increase the counter
-    mem_read_atomic(&tmp, &dummy_counter, sizeof(tmp));
-    tmp++;
-    mem_write_atomic(&tmp, &dummy_counter, sizeof(tmp));
+    /* Grab the latch value (test-set).  If it's 0xFF we go to the sleep/scan loop. */
+    mem_test_set(&xfer, (__mem40 void *)&latch, sizeof(xfer));
+    while (xfer == 0xFF) {
+      /* Periodic background work: increment the exported counter atomically. */
+      mem_incr32((__mem40 void *)&dummy_counter);
+
+      /* Yield a bit so we don't busy spin (match behavior in your template). */
+      sleep(INCREMENT_MS);
+
+      /* re-check latch value */
+      mem_test_set(&xfer, (__mem40 void *)&latch, sizeof(xfer));
+    }
+
+    /* If latch was cleared (someone triggered us), do a short immediate burst of work. */
+    for (i = 0; i < 8; i++) {
+      mem_incr32((__mem40 void *)&dummy_counter);
+    }
+
+    /* Release the latch (clear the test-set) so others waiting can be notified. */
+    tmp = 0xFF;
+    mem_test_clr(&tmp, (__mem40 void *)&latch, sizeof(tmp));
   }
 }
 
