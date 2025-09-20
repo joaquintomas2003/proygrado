@@ -15,10 +15,14 @@ __export __mem40 uint32_t dummy_counter = 0;    /* counter to confirm ME runs */
 void timer_thread()
 {
   __xrw uint32_t xfer = 0xFF;
-  __xrw uint32_t tmp;
+  __xrw uint32_t tmp = 0;
   int i;
 
   while (1) {
+    // increase the counter
+    mem_read_atomic(&tmp, &dummy_counter, sizeof(tmp));
+    tmp++;
+    mem_write_atomic(&tmp, &dummy_counter, sizeof(tmp));
   }
 }
 
