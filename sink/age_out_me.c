@@ -69,4 +69,57 @@ __export __emem ring_meta ring_G[NUM_RINGS];
 
 void main(void)
 {
+    __xrw ring_meta md_buf;
+    __addr40 __emem bucket_entry *entry;
+    __addr40 __emem bucket_entry *ring_entry;
+    __addr40 __emem ring_meta *ring_info;
+
+    uint32_t row = 0;
+    uint32_t bucket, ring_index;
+    uint64_t now;
+
+    for (;;) {
+        now = me_tsc_read();  /* current timestamp in cycles */
+
+        entry = &int_flowcache[row].entry[0];
+        for (bucket = 0; bucket < BUCKET_SIZE; bucket++, entry++) {
+            uint64_t last_ts;
+
+            mem_read64(&last_ts, &entry->last_update_timestamp, sizeof(last_ts));
+
+            if (last_ts && (now - last_ts > AGE_THRESHOLD_NS)) {
+                /* Pick ring by row index */
+                ring_index = row & (NUM_RINGS - 1);
+                ring_info = &ring_G[ring_index];
+
+                /* Load ring metadata */
+                mem_read_atomic(&md_buf, ring_info, sizeof(md_buf));
+                if (!md_buf.full) {
+                    ring_entry = &ring_buffer_G[ring_index].entry[md_buf.write_pointer];
+
+                    /* Evict entry */
+                    mem_write_atomic(entry, ring_entry, sizeof(*entry));
+
+                    /* Clear bucket */
+                    __xwrite uint32_t zero32 = 0;
+                    mem_write_atomic(&zero32, &entry->packet_count, sizeof(zero32));
+                    __xwrite uint64_t zero64 = 0;
+                    mem_write_atomic(&zero64, &entry->last_update_timestamp, sizeof(zero64));
+
+                    /* Update ring metadata */
+                    md_buf.write_pointer = (md_buf.write_pointer + 1) & (RING_SIZE - 1);
+                    if (md_buf.write_pointer == md_buf.read_pointer)
+                        md_buf.full = 1;
+
+                    mem_write_atomic(&md_buf, ring_info, sizeof(md_buf));
+                }
+            }
+        }
+
+        row++;
+        if (row >= FLOWCACHE_ROWS) row = 0;
+
+        /* avoid hogging ME: short sleep */
+        sleep(100);
+    }
 }
