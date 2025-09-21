@@ -85,8 +85,8 @@ void main(void)
     __xwrite uint64_t zero64;
 
     for (;;) {
-        now = _me_tsc_read();
+        now = me_tsc_read();
 
-        _sleep(100);
+        sleep(100);
     }
 }
