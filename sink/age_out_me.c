@@ -83,10 +83,10 @@ void main(void)
     __xwrite bucket_entry entry_buf;
     __xwrite uint32_t zero32;
     __xwrite uint64_t zero64;
+    __xrw uint32_t head_val;
 
     for (;;) {
         now = me_tsc_read();
-        __xrw uint32_t head_val;
         mem_read_atomic(&head_val, ring_info, sizeof(uint32_t));
 
         sleep(100);
