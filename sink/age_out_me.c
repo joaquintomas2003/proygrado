@@ -91,7 +91,9 @@ void main(void)
         entry = (__addr40 __emem bucket_entry *)&int_flowcache[row].entry[0];
         for (bucket = 0; bucket < BUCKET_SIZE; bucket++, entry++) {
 
-            mem_read64(&last_ts, &entry->last_update_timestamp, sizeof(last_ts));
+            mem_read64((__declspec(xfer_read_reg) void *)&last_ts,
+                       &entry->last_update_timestamp,
+                       sizeof(last_ts));
 
             if (last_ts && (now - last_ts > AGE_THRESHOLD_NS)) {
             }
