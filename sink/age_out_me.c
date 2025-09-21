@@ -1,12 +1,7 @@
 #include <nfp.h>
 #include <stdint.h>
+#include <nfp/me.h>
 #include <nfp/mem_atomic.h>
-#include <nfp_chipres.h>
-#include <pkt/pkt.h>
-#include <pktio/pktio.h>
-#include <fast_meter.h>
-#include <modscript/modscript.h>
-#include <blm.h>
 
 #define FLOWCACHE_ROWS (1 << 18)
 #define BUCKET_SIZE 12
