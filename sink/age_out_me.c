@@ -1,5 +1,6 @@
 #include <nfp.h>
 #include <stdint.h>
+#include <nfp/mem_atomic.h>
 #include <nfp/me.h>
 
 #define FLOWCACHE_ROWS (1 << 18)
