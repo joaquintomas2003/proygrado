@@ -86,6 +86,7 @@ void main(void)
 
     for (;;) {
         now = me_tsc_read();
+        mem_read_atomic(&zero32, &zero32, sizeof(zero32));
 
         sleep(100);
     }
