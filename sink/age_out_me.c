@@ -1,7 +1,5 @@
 #include <nfp.h>
 #include <stdint.h>
-#include <nfp/mem_atomic.h>
-#include <nfp/mem_bulk.h>
 #include <nfp/me.h>
 
 #define FLOWCACHE_ROWS (1 << 18)
@@ -87,20 +85,6 @@ void main(void)
 
     for (;;) {
         now = me_tsc_read();
-
-        entry = (__addr40 __emem bucket_entry *)&int_flowcache[row].entry[0];
-        for (bucket = 0; bucket < BUCKET_SIZE; bucket++, entry++) {
-
-            mem_read64((__declspec(xfer_read_reg) void *)&last_ts,
-                       &entry->last_update_timestamp,
-                       sizeof(last_ts));
-
-            if (last_ts && (now - last_ts > AGE_THRESHOLD_NS)) {
-            }
-        }
-
-        row++;
-        if (row >= FLOWCACHE_ROWS) row = 0;
 
         sleep(100);
     }
