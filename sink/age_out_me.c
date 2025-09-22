@@ -67,6 +67,72 @@ __export __emem bucket_list int_flowcache[FLOWCACHE_ROWS];
 __export __emem ring_list ring_buffer_G[NUM_RINGS];
 __export __emem ring_meta ring_G[NUM_RINGS];
 
+void evict_stale_entries(uint64_t current_time, uint64_t threshold_ns) {
+    __xrw ring_meta ring_meta_read;
+    __addr40 __emem bucket_entry *entry;
+    __addr40 __emem ring_meta *ring_info;
+    __addr40 __emem ring_entry *r_entry;
+    uint32_t wp, rp, f;
+    uint32_t i, j, ring_index;
+    uint64_t last_ts;
+    uint32_t zero = 0;
+    uint32_t key_reset[4] = {0};
+
+    for (i = 0; i < FLOWCACHE_ROWS; i++) {
+        for (j = 0; j < BUCKET_SIZE; j++) {
+            entry = &int_flowcache[i].entry[j];
+
+            mem_read_atomic(&last_ts, &entry->last_update_timestamp, sizeof(last_ts));
+
+            if (entry->packet_count != 0 && (current_time - last_ts) > threshold_ns) {
+                // Determine ring index
+                ring_index = i & (NUM_RINGS - 1);
+                ring_info = &ring_G[ring_index];
+
+                mem_read_atomic(&ring_meta_read, ring_info, sizeof(ring_meta_read));
+                wp = ring_meta_read.write_pointer;
+                rp = ring_meta_read.read_pointer;
+                f  = ring_meta_read.full;
+
+                if (f == 0) {
+                    r_entry = &ring_buffer_G[ring_index].entry[wp];
+
+                    // Copy key and metadata to ring buffer
+                    mem_write_atomic(entry->key, &r_entry->key, sizeof(entry->key));
+                    mem_write_atomic(&entry->packet_count, &r_entry->packet_count, sizeof(entry->packet_count));
+                    mem_write_atomic(&entry->last_update_timestamp, &r_entry->last_update_timestamp, sizeof(entry->last_update_timestamp));
+                    mem_write_atomic(&entry->int_metric_info_value.node_count,
+                                     &r_entry->int_metric_info_value.node_count,
+                                     sizeof(entry->int_metric_info_value.node_count));
+
+                    // Copy per-node data
+                    for (uint32_t k = 0; k < entry->int_metric_info_value.node_count && k < MAX_INT_NODES; k++) {
+                        mem_write_atomic(&entry->int_metric_info_value.latest[k],
+                                         &r_entry->int_metric_info_value.latest[k],
+                                         sizeof(entry->int_metric_info_value.latest[k]));
+                        mem_write_atomic(&entry->int_metric_info_value.average[k],
+                                         &r_entry->int_metric_info_value.average[k],
+                                         sizeof(entry->int_metric_info_value.average[k]));
+                    }
+
+                    // Advance write pointer
+                    wp = (wp + 1) & (RING_SIZE - 1);
+                    if (wp == rp) f = 1;
+
+                    // Free the bucket
+                    mem_write_atomic(&zero, &entry->packet_count, sizeof(zero));
+                    mem_write_atomic(&key_reset, &entry->key, sizeof(key_reset));
+
+                    // Update ring metadata
+                    ring_meta_read.write_pointer = wp;
+                    ring_meta_read.full = f;
+                    mem_write_atomic(&ring_meta_read, ring_info, sizeof(ring_meta_read));
+                }
+            }
+        }
+    }
+}
+
 void main(void)
 {
 }
