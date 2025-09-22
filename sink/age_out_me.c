@@ -67,7 +67,7 @@ __export __emem bucket_list int_flowcache[FLOWCACHE_ROWS];
 __export __emem ring_list ring_buffer_G[NUM_RINGS];
 __export __emem ring_meta ring_G[NUM_RINGS];
 
-void evict_stale_entries(uint64_t current_time, uint64_t threshold_ns) {
+void evict_stale_entries(uint64_t threshold_ns) {
     __xrw ring_meta ring_meta_read;
     __volatile __addr40 __emem bucket_entry *entry;
     __volatile __addr40 __emem ring_meta *ring_info;
@@ -79,8 +79,10 @@ void evict_stale_entries(uint64_t current_time, uint64_t threshold_ns) {
     uint32_t zero = 0;
     uint32_t key_reset[4] = {0};
     uint32_t k;
+    uint64_t current_time;
 
     for (i = 0; i < FLOWCACHE_ROWS; i++) {
+        current_time = me_tsc_read();
         for (j = 0; j < BUCKET_SIZE; j++) {
             entry = &int_flowcache[i].entry[j];
 
@@ -190,21 +192,13 @@ __export __mem40 uint32_t timers = 0;
 
 void main(void)
 {
-    uint64_t current_time;
-
     // Only one thread launches the periodic eviction timer
     if (ctx() == 0 && timers == 0) {
         timers++;
 
         while (1) {
-            // Get current timestamp in nanoseconds
-            // (assumes NFP intrinsic for 64-bit timestamp)
-            current_time = me_tsc_read();
-
             // Call the eviction routine
-            evict_stale_entries(current_time, AGE_THRESHOLD_NS);
-
-            sleep(200000000); // Sleep for 200ms
+            evict_stale_entries(AGE_THRESHOLD_NS);
         }
     }
 }
