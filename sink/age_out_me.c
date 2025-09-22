@@ -186,6 +186,25 @@ void evict_stale_entries(uint64_t current_time, uint64_t threshold_ns) {
     }
 }
 
+__export __mem40 uint32_t timers = 0;
+
 void main(void)
 {
+    uint64_t current_time;
+
+    // Only one thread launches the periodic eviction timer
+    if (ctx() == 0 && timers == 0) {
+        timers++;
+
+        while (1) {
+            // Get current timestamp in nanoseconds
+            // (assumes NFP intrinsic for 64-bit timestamp)
+            current_time = me_tsc_read();
+
+            // Call the eviction routine
+            evict_stale_entries(current_time, AGE_THRESHOLD_NS);
+
+            sleep(200000000); // Sleep for 200ms
+        }
+    }
 }
