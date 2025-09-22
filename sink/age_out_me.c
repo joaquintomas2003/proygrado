@@ -10,7 +10,7 @@
 #define IP_PROTO_TCP 0x6
 #define NUM_RINGS 8
 #define RING_SIZE (1 << 16)
-#define AGE_THRESHOLD_NS (1000000000ULL)  /* 1 second for testing */
+#define AGE_THRESHOLD_NS (500000000ULL)  /* 500 ms */
 
 typedef struct int_metric_sample {
   uint32_t node_id; /* Node ID */
