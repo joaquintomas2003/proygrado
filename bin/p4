@@ -52,6 +52,8 @@ case "$COMMAND" in
       -4 "$P4_FILE" \
       --nfirc_mac_ingress_timestamp \
       -c main.c \
+      --custom-load-list age_out_me.list \
+      --custom-load-me i32.me0 \
       -A 52 \
       "${EXTRA_ARGS[@]}"
 
