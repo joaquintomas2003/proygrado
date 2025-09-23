@@ -2,13 +2,33 @@
 #include <pif_plugin.h>
 #include <std/hash.h>
 
-#define FLOWCACHE_ROWS (1 << 18)
+#define FLOWCACHE_ROWS (1 << 10)
 #define BUCKET_SIZE 12
 #define MAX_INT_NODES 5
 #define IP_PROTO_UDP 0x11
 #define IP_PROTO_TCP 0x6
 #define NUM_RINGS 8
 #define RING_SIZE (1 << 16)
+
+#define x1 1                        //2^0
+#define x2 x1, x1                   //2^1
+#define x4 x2, x2                   //2^2
+#define x8 x4, x4                   //2^3
+#define x16 x8, x8                  //2^4
+#define x32 x16, x16                //2^5
+#define x64 x32, x32                //2^6
+#define x128 x64, x64               //2^7
+#define x256 x128, x128             //2^8
+#define x512 x256, x256             //2^9
+#define x1024 x512, x512            //2^10
+#define x2048 x1024, x1024          //2^11
+#define x4096 x2048, x2048          //2^12
+#define x8192 x4096, x4096          //2^13
+#define x16384 x8192, x8192         //2^14
+#define x32768 x16384, x16384       //2^15
+#define x655356 x32768, x32768      //2^16
+#define x1310712 x655356, x655356   //2^17
+#define x2621424 x1310712, x1310712 //2^18
 
 /* Event type bits */
 #define EVENT_T_SWITCH  (1u << 0)
@@ -88,6 +108,37 @@ __export __emem ring_meta ring_G[NUM_RINGS];
 __export __emem event_ring_list ring_buffer_I[NUM_RINGS];
 __export __emem ring_meta ring_I[NUM_RINGS];
 
+volatile __emem __export uint32_t global_semaphores[FLOWCACHE_ROWS] = {x1024};
+volatile __emem __export uint32_t ring_buffer_sem_G[NUM_RINGS] = {x8};
+volatile __emem __export uint32_t ring_buffer_sem_I[NUM_RINGS] = {x8};
+
+static __inline void semaphore_down(volatile __declspec(mem addr40) void * addr) {
+  unsigned int addr_hi, addr_lo;
+  __declspec(read_write_reg) int xfer;
+  SIGNAL_PAIR my_signal_pair;
+  addr_hi = ((unsigned long long int)addr >> 8) & 0xff000000;
+  addr_lo = (unsigned long long int)addr & 0xffffffff;
+  do {
+      xfer = 1;
+      __asm {
+      mem[test_subsat, xfer, addr_hi, <<8, addr_lo, 1],\
+          sig_done[my_signal_pair];
+      ctx_arb[my_signal_pair]
+      }
+      sleep(500);
+  } while (xfer == 0);
+}
+
+static __inline void semaphore_up(volatile __declspec(mem addr40) void * addr) {
+  unsigned int addr_hi, addr_lo;
+  __declspec(read_write_reg) int xfer;
+  addr_hi = ((unsigned long long int)addr >> 8) & 0xff000000;
+  addr_lo = (unsigned long long int)addr & 0xffffffff;
+  __asm {
+    mem[incr, --, addr_hi, <<8, addr_lo, 1];
+  }
+}
+
 static __inline int _get_hash_key(EXTRACTED_HEADERS_T *headers, uint32_t hash_key[4]) {
   uint32_t src_port;
   uint32_t dst_port;
@@ -123,15 +174,15 @@ static __inline int _push_event_to_RI(uint32_t ring_index,
                                       uint32_t value,
                                       uint32_t event_bitmap,
                                       uint32_t ts_low32) {
-  __addr40 __emem ring_meta *ri_meta = &ring_I[ring_index];
+  __addr40 __emem ring_meta *ri_meta;
   __addr40 __emem event_record *slot;
-
   uint32_t wp, rp, f;
-
   __xrw ring_meta md_buf; /* [0]=wp, [1]=rp, [2]=full */
-
   __xwrite uint32_t wr0[4];
 
+  semaphore_down(&ring_buffer_sem_I[ring_index]);
+  ri_meta = &ring_I[ring_index];
+  
   mem_read_atomic(&md_buf, ri_meta, sizeof(md_buf));
   wp = md_buf.write_pointer;
   rp = md_buf.read_pointer;
@@ -155,6 +206,7 @@ static __inline int _push_event_to_RI(uint32_t ring_index,
   md_buf.full = f;
 
   mem_write_atomic(&md_buf, ri_meta, sizeof(md_buf));
+  semaphore_up(&ring_buffer_sem_I[ring_index]);
   return 0;
 }
 
@@ -221,6 +273,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   scalars = (__lmem struct pif_header_scalars *) (headers + PIF_PARREP_scalars_OFF_LW);
   intrinsic_metadata = (__lmem struct pif_header_intrinsic_metadata *) (headers + PIF_PARREP_intrinsic_metadata_OFF_LW);
 
+  semaphore_down(&global_semaphores[hash_value]);
   // Search for an existing entry in the bucket
   for (i = 0; i < BUCKET_SIZE; i++) {
     entry = &int_flowcache[hash_value].entry[i];
@@ -242,58 +295,60 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   // If we reached the end of the bucket without finding a match
   if (i == BUCKET_SIZE) {
     ring_index = hash_value & (NUM_RINGS - 1);
-    ring_info = &ring_G[ring_index];
+    semaphore_down(&ring_buffer_sem_G[ring_index]);
+      ring_info = &ring_G[ring_index];
 
-    mem_read_atomic(&ring_meta_read, ring_info, sizeof(ring_meta_read));
-    wp = ring_meta_read.write_pointer;
-    rp = ring_meta_read.read_pointer;
-    f  = ring_meta_read.full;
+      mem_read_atomic(&ring_meta_read, ring_info, sizeof(ring_meta_read));
+      wp = ring_meta_read.write_pointer;
+      rp = ring_meta_read.read_pointer;
+      f  = ring_meta_read.full;
 
-    if (f == 0) {
-      nodes_present = lru_entry->int_metric_info_value.node_count;
-      ring_entry = &ring_buffer_G[ring_index].entry[wp];
+      if (f == 0) {
+        nodes_present = lru_entry->int_metric_info_value.node_count;
+        ring_entry = &ring_buffer_G[ring_index].entry[wp];
 
-      key_lru[0] = lru_entry->key[0];
-      key_lru[1] = lru_entry->key[1];
-      key_lru[2] = lru_entry->key[2];
-      key_lru[3] = lru_entry->key[3];
-      packet_count_lru = lru_entry->packet_count;
+        key_lru[0] = lru_entry->key[0];
+        key_lru[1] = lru_entry->key[1];
+        key_lru[2] = lru_entry->key[2];
+        key_lru[3] = lru_entry->key[3];
+        packet_count_lru = lru_entry->packet_count;
 
-      mem_write_atomic(key_lru, &ring_entry->key, sizeof(key_lru));
-      mem_write_atomic(&packet_count_lru, &ring_entry->packet_count, sizeof(packet_count_lru));
-      mem_write_atomic(&timestamp, &ring_entry->last_update_timestamp, sizeof(timestamp));
-      mem_write_atomic(&nodes_present, &ring_entry->int_metric_info_value.node_count, sizeof(nodes_present));
-      
-      for (k = 0; k < nodes_present && k < MAX_INT_NODES; k++) {
-        sample.node_id = lru_entry->int_metric_info_value.latest[k].node_id;
-        sample.hop_latency = lru_entry->int_metric_info_value.latest[k].hop_latency;
-        sample.queue_occupancy = lru_entry->int_metric_info_value.latest[k].queue_occupancy;
-        sample.egress_interface_tx = lru_entry->int_metric_info_value.latest[k].egress_interface_tx;
-        mem_write_atomic(&sample, &ring_entry->int_metric_info_value.latest[k], sizeof(sample));
+        mem_write_atomic(key_lru, &ring_entry->key, sizeof(key_lru));
+        mem_write_atomic(&packet_count_lru, &ring_entry->packet_count, sizeof(packet_count_lru));
+        mem_write_atomic(&timestamp, &ring_entry->last_update_timestamp, sizeof(timestamp));
+        mem_write_atomic(&nodes_present, &ring_entry->int_metric_info_value.node_count, sizeof(nodes_present));
+        
+        for (k = 0; k < nodes_present && k < MAX_INT_NODES; k++) {
+          sample.node_id = lru_entry->int_metric_info_value.latest[k].node_id;
+          sample.hop_latency = lru_entry->int_metric_info_value.latest[k].hop_latency;
+          sample.queue_occupancy = lru_entry->int_metric_info_value.latest[k].queue_occupancy;
+          sample.egress_interface_tx = lru_entry->int_metric_info_value.latest[k].egress_interface_tx;
+          mem_write_atomic(&sample, &ring_entry->int_metric_info_value.latest[k], sizeof(sample));
 
-        sample.node_id = lru_entry->int_metric_info_value.average[k].node_id;
-        sample.hop_latency = lru_entry->int_metric_info_value.average[k].hop_latency;
-        sample.queue_occupancy = lru_entry->int_metric_info_value.average[k].queue_occupancy;
-        sample.egress_interface_tx = lru_entry->int_metric_info_value.average[k].egress_interface_tx;
-        mem_write_atomic(&sample, &ring_entry->int_metric_info_value.average[k], sizeof(sample));
+          sample.node_id = lru_entry->int_metric_info_value.average[k].node_id;
+          sample.hop_latency = lru_entry->int_metric_info_value.average[k].hop_latency;
+          sample.queue_occupancy = lru_entry->int_metric_info_value.average[k].queue_occupancy;
+          sample.egress_interface_tx = lru_entry->int_metric_info_value.average[k].egress_interface_tx;
+          mem_write_atomic(&sample, &ring_entry->int_metric_info_value.average[k], sizeof(sample));
+        }
+        wp = (wp + 1) & (RING_SIZE - 1);
+        if(wp == rp){
+            f = 1;
+        }
+        /* Free the bucket on the hash table */
+        mem_write_atomic(&zero, &lru_entry->packet_count, sizeof(zero));
+        mem_write_atomic(&key_reset, &lru_entry->key, sizeof(key_reset));
+        /* We were on the last bucket, now we are on the free'd bucket*/
+        entry = lru_entry;
+
+      } else {
+        return PIF_PLUGIN_RETURN_FORWARD;
       }
-      wp = (wp + 1) & (RING_SIZE - 1);
-      if(wp == rp){
-          f = 1;
-      }
-      /* Free the bucket on the hash table */
-      mem_write_atomic(&zero, &lru_entry->packet_count, sizeof(zero));
-      mem_write_atomic(&key_reset, &lru_entry->key, sizeof(key_reset));
-      /* We were on the last bucket, now we are on the free'd bucket*/
-      entry = lru_entry;
-
-    } else {
-      return PIF_PLUGIN_RETURN_FORWARD;
-    }
-    ring_meta_read.write_pointer = wp;
-    ring_meta_read.full          = f;
-    ring_meta_read.read_pointer  = rp;
-    mem_write_atomic(&ring_meta_read, ring_info, sizeof(ring_meta_read));
+      ring_meta_read.write_pointer = wp;
+      ring_meta_read.full          = f;
+      ring_meta_read.read_pointer  = rp;
+      mem_write_atomic(&ring_meta_read, ring_info, sizeof(ring_meta_read));
+    semaphore_up(&ring_buffer_sem_G[ring_index]);
   }
 
   // Metadata pointers for nodes
@@ -414,7 +469,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
       mem_write_atomic(&sample, &entry->int_metric_info_value.average[k], sizeof(sample));
     }
   }
-
+  semaphore_up(&global_semaphores[hash_value]);
   /* === End-to-end hop-latency events (T/C) === */
   if (e2e_curr_hop >= THR_T_E2E[0]) {
     _push_event_to_RI(ring_index_ev,
