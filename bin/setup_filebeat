@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ELASTIC_DIR="${ELASTIC_DIR:-$REPO_ROOT/elastic}"
+
+FB_SRC="${FB_SRC:-$ELASTIC_DIR/filebeat.yml}"
+FB_DST="${FB_DST:-/etc/filebeat/filebeat.yml}"
+
+PIPELINE_NAME="${PIPELINE_NAME:-nfp_logs_pipeline}"
+PIPELINE_FILE="${PIPELINE_FILE:-$ELASTIC_DIR/pipelines/nfp_logs_pipeline.json}"
+
+ES_URL="${ES_URL:-https://localhost:9200}"
+ES_USERNAME="${ES_USERNAME:-elastic}"
+ES_PASSWORD="${ES_PASSWORD:-}"
+ES_API_KEY="${ES_API_KEY:-}"                  # alternative to user/pass
+ES_CA_CERT="${ES_CA_CERT:-/etc/elasticsearch/certs/http_ca.crt}"
+ES_INSECURE="${ES_INSECURE:-false}"           # set true to skip TLS verify (dev)
+
+curl_es () {
+  local args=( -sS -H 'Content-Type: application/json' )
+  [[ -n "$ES_API_KEY" ]] && args+=( -H "Authorization: ApiKey $ES_API_KEY" )
+  [[ -z "$ES_API_KEY" ]] && args+=( -u "$ES_USERNAME:$ES_PASSWORD" )
+  [[ -n "$ES_CA_CERT" && "$ES_INSECURE" != "true" ]] && args+=( --cacert "$ES_CA_CERT" )
+  [[ "$ES_INSECURE" == "true" ]] && args+=( -k )
+  curl "${args[@]}" "$@"
+}
+
+echo "→ linking $FB_SRC → $FB_DST"
+sudo install -d -m 0755 /etc/filebeat
+if [[ -e "$FB_DST" && ! -L "$FB_DST" ]]; then
+  sudo cp -a "$FB_DST" "${FB_DST}.bak.$(date +%Y%m%d%H%M%S)"
+  echo "  backed up existing config to ${FB_DST}.bak.*"
+fi
+sudo ln -snf "$FB_SRC" "$FB_DST"
+sudo chown root:root "$FB_DST" || true
+sudo chmod 0644 "$FB_DST" || true
+
+echo "→ uploading ingest pipeline: $PIPELINE_NAME"
+curl_es -X PUT "$ES_URL/_ingest/pipeline/$PIPELINE_NAME" --data-binary "@${PIPELINE_FILE}"
+echo
+
+echo "→ filebeat test config"
+sudo filebeat test config
+
+echo "→ filebeat setup (templates/dashboards)"
+# use a temp data path to avoid the service lock
+sudo filebeat setup -E path.data="/tmp/fb-setup-$$" || true
+
+echo "→ restarting filebeat"
+sudo systemctl restart filebeat
+sudo systemctl is-active --quiet filebeat && echo "✓ filebeat running"
+
+echo "✅ setup complete"
