@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Units to manage (change if your names differ)
+UNITS=(elasticsearch kibana filebeat)
+
+SUDO="sudo"
+[[ $EUID -eq 0 ]] && SUDO=""
+
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") [--check | --ensure | --restart]
+
+  --check     Show status (active/enabled) and exit non-zero if any is not active
+  --ensure    Enable + start any service that isn't running (default)
+  --restart   Restart all services
+
+Examples:
+  $(basename "$0")              # ensure (enable+start) all
+  $(basename "$0") --check      # just print statuses
+  $(basename "$0") --restart    # restart all
+EOF
+}
+
+status_unit() {
+  local u="$1"
+  local active enabled
+  active="$($SUDO systemctl is-active "$u" 2>/dev/null || true)"
+  enabled="$($SUDO systemctl is-enabled "$u" 2>/dev/null || true)"
+  printf "%-14s active=%-10s enabled=%s\n" "$u" "${active:-unknown}" "${enabled:-unknown}"
+}
+
+ensure_unit() {
+  local u="$1"
+  echo "→ $u"
+  $SUDO systemctl is-enabled --quiet "$u" || $SUDO systemctl enable "$u" >/dev/null 2>&1 || true
+  if ! $SUDO systemctl is-active --quiet "$u"; then
+    echo "  starting…"
+    $SUDO systemctl start "$u" || true
+    sleep 1
+  fi
+  if $SUDO systemctl is-active --quiet "$u"; then
+    echo "  ✓ running"
+  else
+    echo "  ✗ failed to start — recent logs:" >&2
+    $SUDO journalctl -u "$u" -n 100 --no-pager || true
+    exit 1
+  fi
+}
+
+restart_unit() {
+  local u="$1"
+  echo "↻ restarting $u…"
+  $SUDO systemctl restart "$u" || true
+  $SUDO systemctl is-active --quiet "$u" && echo "  ✓ running" || {
+    echo "  ✗ not running — logs:" >&2
+    $SUDO journalctl -u "$u" -n 100 --no-pager || true
+    exit 1
+  }
+}
+
+mode="${1:---ensure}"
+case "$mode" in
+  --help|-h) usage; exit 0 ;;
+  --check|--ensure|--restart) ;;
+  *) usage; exit 2 ;;
+esac
+
+case "$mode" in
+  --check)
+    bad=0
+    for u in "${UNITS[@]}"; do
+      status_unit "$u"
+      $SUDO systemctl is-active --quiet "$u" || bad=1
+    done
+    exit "$bad"
+    ;;
+  --ensure)
+    for u in "${UNITS[@]}"; do
+      ensure_unit "$u"
+    done
+    echo "✅ all services active"
+    ;;
+  --restart)
+    for u in "${UNITS[@]}"; do
+      restart_unit "$u"
+    done
+    echo "✅ all services restarted"
+    ;;
+esac

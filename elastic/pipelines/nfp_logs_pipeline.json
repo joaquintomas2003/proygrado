@@ -1,0 +1,26 @@
+{
+  "description": "Parse Netronome NFP logs (HWD/RTE/PIFLIB)",
+  "processors": [
+    {
+      "grok": {
+        "field": "message",
+        "patterns": [
+          "^%{WORD:nfp.source}: %{TIMESTAMP_ISO8601:nfp.ts} - %{DATA:src.file}:%{NUMBER:src.line:int} %{GREEDYDATA:nfp.msg}"
+        ],
+        "ignore_failure": true
+      }
+    },
+    {
+      "date": {
+        "field": "nfp.ts",
+        "formats": ["yyyy-MM-dd HH:mm:ss:SSS"],
+        "ignore_failure": true
+      }
+    },
+    { "set": { "field": "event.module", "value": "nfp", "ignore_failure": true } },
+    { "rename": { "field": "nfp.msg", "target_field": "message", "ignore_missing": true, "ignore_failure": true } }
+  ],
+  "on_failure": [
+    { "set": { "field": "error.message", "value": "{{ _ingest.on_failure_message }}" } }
+  ]
+}
