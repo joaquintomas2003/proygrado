@@ -1,4 +1,5 @@
 filebeat.inputs:
+  # === Logs de NFP ===
   - type: filestream
     id: nfp-logs
     enabled: true
@@ -12,11 +13,60 @@ filebeat.inputs:
       event.dataset: nfp.logs
     fields_under_root: true
 
+  # === INT metrics ===
+  - type: filestream
+    id: int-metrics
+    enabled: true
+    paths:
+      - /var/spool/int/*.ndjson
+
+    parsers:
+      - ndjson:
+          overwrite_keys: true
+          add_error_key: true
+
+    prospector.scanner.check_interval: 1s
+    prospector.scanner.fingerprint.length: 64
+    prospector.scanner.fingerprint.offset: 0
+    close_eof: true
+    close.on_state_change.inactive: 30s
+    close.on_state_change.removed: true
+    clean_removed: true
+    clean_inactive: 10m
+
+    fields:
+      service: int
+      event.dataset: int.metrics
+      event.category: [ "network" ]
+      event.kind: event
+    fields_under_root: true
+
+queue:
+  disk:
+    enabled: true
+    path: /var/lib/filebeat/queue
+    max_size: 1gb
+
 output.elasticsearch:
   hosts: ["https://localhost:9200"]
   username: "${ES_USERNAME:elastic}"
   password: "${ES_PASSWORD}"
   ssl.certificate_authorities: ["/etc/elasticsearch/certs/http_ca.crt"]
-  pipeline: "nfp_logs_pipeline"
+
+  indices:
+    - index: "nfp-logs-%{+yyyy.MM.dd}"
+      when.equals:
+        event.dataset: "nfp.logs"
+    - index: "int-metrics-%{+yyyy.MM.dd}"
+      when.equals:
+        event.dataset: "int.metrics"
+
+  pipelines:
+    - pipeline: "nfp_logs_pipeline"
+      when.equals:
+        event.dataset: "nfp.logs"
+    - pipeline: "int_metrics_pipeline"
+      when.equals:
+        event.dataset: "int.metrics"
 
 setup.ilm.enabled: false
