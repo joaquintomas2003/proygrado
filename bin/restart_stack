@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "→ Restarting Elasticsearch..."
+sudo systemctl restart elasticsearch
+sudo systemctl status --no-pager elasticsearch | head -n 5
+
+echo "→ Restarting Kibana..."
+sudo systemctl restart kibana
+sudo systemctl status --no-pager kibana | head -n 5
+
+echo "→ Restarting Filebeat..."
+sudo systemctl restart filebeat
+sudo systemctl status --no-pager filebeat | head -n 5
+
+echo "✓ All services restarted"

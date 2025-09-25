@@ -49,8 +49,8 @@ queue:
 
 output.elasticsearch:
   hosts: ["https://localhost:9200"]
-  username: "${ES_USERNAME:elastic}"
-  password: "${ES_PASSWORD}"
+  username: "elastic"
+  password: "diciembre"
   ssl.certificate_authorities: ["/etc/elasticsearch/certs/http_ca.crt"]
 
   indices:
