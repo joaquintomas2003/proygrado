@@ -17,7 +17,7 @@
 //
 // Notes:
 //   - No Bulk action lines; NDJSON is compatible with Filebeat filestream+ndjson parser.
-//   - SEG_MAX_AGE_MS defaults to 10s to avoid sub-1KB segments at low traffic.
+//   - SEG_MAX_AGE_MS defaults to 10s (can be bumped) to avoid sub-1KB segments at low traffic.
 //   - On shutdown, we drain the queue before closing/renaming the final segment.
 
 #include "spooler.h"
@@ -30,12 +30,13 @@
 #include <unistd.h>     // gethostname, fsync
 #include <time.h>       // clock_gettime, gmtime_r
 #include <sys/stat.h>   // mkdir, stat
+#include <fcntl.h>      // open
 #include <limits.h>
 
 #define SPOOL_DIR         "/var/spool/int"
 #define SEG_MAX_BYTES     (128u * 1024u * 1024u) /* 128 MB */
 #define SEG_MAX_DOCS      500000u
-#define SEG_MAX_AGE_MS    10000u                  /* 10s: avoids tiny segments */
+#define SEG_MAX_AGE_MS    30000u                  /* 30s: avoids tiny segments */
 #define HOSTNAME_MAX_LEN  128
 
 extern volatile int stop;
@@ -66,6 +67,11 @@ static spooler_t g_spooler;
 static pthread_t g_thread;
 
 /* ---------------- Helpers ---------------- */
+static void fsync_dir(const char *dir) {
+    int dfd = open(dir, O_DIRECTORY | O_RDONLY);
+    if (dfd >= 0) { fsync(dfd); close(dfd); }
+}
+
 static inline uint64_t now_ms(void) {
     struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);
     return (uint64_t)ts.tv_sec * 1000ull + (uint64_t)ts.tv_nsec / 1000000ull;
@@ -138,6 +144,10 @@ static void spooler_open(spooler_t *s) {
     s->fp = fopen(s->path_open, "ab");
     if (!s->fp) { perror("fopen spool"); exit(1); }
 
+    // 1 MiB buffered I/O
+    static char iobuf[1<<20];
+    setvbuf(s->fp, iobuf, _IOFBF, sizeof iobuf);
+
     s->bytes = 0;
     s->docs  = 0;
     s->opened_ms = now_ms();
@@ -151,12 +161,15 @@ static void spooler_close(spooler_t *s) {
     s->fp = NULL;
     if (rename(s->path_open, s->path_ready) != 0) {
         perror("rename spool segment");
+    } else {
+        fsync_dir(SPOOL_DIR); // ensure rename durable
     }
 }
 
 static void spooler_rotate_if_needed(spooler_t *s) {
     uint64_t age = now_ms() - s->opened_ms;
-    if (s->bytes >= SEG_MAX_BYTES || s->docs >= SEG_MAX_DOCS || age >= SEG_MAX_AGE_MS) {
+    if ((s->bytes >= SEG_MAX_BYTES || s->docs >= SEG_MAX_DOCS || age >= SEG_MAX_AGE_MS)
+        && s->docs > 0) {
         spooler_close(s);
         spooler_open(s);
     }
@@ -215,7 +228,6 @@ static void write_doc_ndjson(FILE *fp, const bucket_entry *e,
     wrote += write_int_samples_json(fp, e->int_metric_info_value.average, n);
     wrote += fprintf(fp, "}}\n");
 
-    fflush(fp);
     *bytes_accum += wrote;
     *docs_accum  += 1;
 }
@@ -223,12 +235,17 @@ static void write_doc_ndjson(FILE *fp, const bucket_entry *e,
 /* Spooler thread: drain until q_pop returns 0 (i.e., stop && empty) */
 static void* spooler_thread(void *arg) {
     (void)arg;
-    spooler_open(&g_spooler);
+    g_spooler.fp = NULL; // lazy-open
 
     bucket_entry e;
     for (;;) {
         if (!q_pop(&g_q, &e)) break;  // returns 0 only if stop && queue empty
+
+        if (!g_spooler.fp) {
+            spooler_open(&g_spooler); // open segment on first event
+        }
         write_doc_ndjson(g_spooler.fp, &e, g_spooler.hostname, &g_spooler.bytes, &g_spooler.docs);
+        fflush(g_spooler.fp); // keep tailing fresh
         spooler_rotate_if_needed(&g_spooler);
     }
 
@@ -243,6 +260,7 @@ void spooler_init(void) {
         strncpy(g_spooler.hostname, "unknown", sizeof g_spooler.hostname);
     g_spooler.hostname[sizeof g_spooler.hostname - 1] = '\0';
     g_spooler.seq = 0;
+    g_spooler.fp = NULL;
 }
 
 void spooler_start(void) {
@@ -253,7 +271,6 @@ void spooler_start(void) {
 }
 
 void spooler_stop(void) {
-    // Wake any waiters so the thread can observe 'stop' and drain/exit.
     pthread_mutex_lock(&g_q.mu);
     pthread_cond_broadcast(&g_q.not_empty);
     pthread_cond_broadcast(&g_q.not_full);
