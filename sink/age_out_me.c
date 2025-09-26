@@ -78,6 +78,7 @@ __export __emem uint64_t debug_timestamp_last;
 __export __emem uint64_t debug_time_curr;
 __export __emem uint64_t debug_time_last;
 __export __emem uint64_t debug_time_diff;
+__export __emem uint64_t debug_src_ip;
 
 unsigned long long get_time_diff_ns(__mem40 unsigned long long *last)
 {
@@ -126,11 +127,15 @@ void evict_stale_entries(uint64_t threshold_ns) {
     uint64_t current_time;
 
     __xrw uint64_t ts_buf;
+    __xrw uint32_t ip_buf;
 
-    for (i = 0; i < FLOWCACHE_ROWS; i++) {
+    for (i = 0; i < 1; i++) {
         current_time = me_tsc_read();
-        for (j = 0; j < BUCKET_SIZE; j++) {
+        for (j = 0; j < 1; j++) {
             entry = &int_flowcache[i].entry[j];
+
+            mem_read_atomic(&ip_buf, (__mem void *)&entry->key[0], sizeof(ip_buf));
+            mem_write_atomic(&ip_buf, (__mem void *)&debug_src_ip, sizeof(ip_buf));
 
             mem_read_atomic(&last_ts_xrw, (__mem void *)&entry->last_update_timestamp, sizeof(last_ts_xrw));
             last_ts = last_ts_xrw;

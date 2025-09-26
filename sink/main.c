@@ -214,7 +214,8 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   }
 
   // Calculate the hash value using CRC32
-  hash_value = hash_me_crc32((void *) hash_key, sizeof(hash_key), 1);
+  hash_value = 0;
+  // hash_value = hash_me_crc32((void *) hash_key, sizeof(hash_key), 1);
   hash_value &= (FLOWCACHE_ROWS - 1);
   ring_index_ev = hash_value & (NUM_RINGS - 1);
   bitmap = (__lmem struct pif_header_ingress__bitmap *) (headers + PIF_PARREP_ingress__bitmap_OFF_LW);
