@@ -82,20 +82,18 @@ unsigned long long get_time_diff_ns(__mem40 unsigned long long *last)
     unsigned long long prev;
     unsigned long long delta_ticks;
     unsigned long long elapsed_ns;
+    __xrw unsigned long long xfer;
 
     ts = me_tsc_read();
 
-    /* read previous timestamp */
-    mem_read32(&prev, last, sizeof(prev));
+    mem_read64(&xfer, last, sizeof(xfer));
+    prev = xfer;
 
-    /* compute delta (make sure variables declared before this) */
     delta_ticks = ts - prev;
 
-    /* update stored timestamp */
-    prev = ts;
-    mem_write32(&prev, last, sizeof(prev));
+    xfer = ts;
+    mem_write64(&xfer, last, sizeof(xfer));
 
-    /* integer math: ns = ticks * (16*1000 / MHz) */
     elapsed_ns = (delta_ticks * NS_PER_TICK_NUM) / NS_PER_TICK_DEN;
 
     return elapsed_ns;
