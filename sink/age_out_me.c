@@ -12,8 +12,11 @@
 #define RING_SIZE (1 << 16)
 // #define AGE_THRESHOLD_NS (500000000ULL)  /* 500 ms */
 #define AGE_THRESHOLD_NS (300000000000)  /* 5 minutes */
-#define ME_SPEED_MHZ 633   /* from nfp-hwinfo me.speed */
-#define NS_PER_TICK  (16.0 * 1000.0 / ME_SPEED_MHZ)  /* 16 cycles per tick, MHz to ns */
+
+/* From nfp-hwinfo: me.speed=633 */
+#define ME_SPEED_MHZ      633
+#define NS_PER_TICK_NUM   (16 * 1000ULL)   /* numerator (ns * MHz) */
+#define NS_PER_TICK_DEN   (ME_SPEED_MHZ)   /* denominator */
 
 typedef struct int_metric_sample {
   uint32_t node_id; /* Node ID */
@@ -73,22 +76,29 @@ __export __emem ring_meta ring_G[NUM_RINGS];
 __export __emem uint64_t debug_timestamp_curr;
 __export __emem uint64_t debug_timestamp_last;
 
-unsigned long long get_time_diff_ns(__mem40 unsigned long long *last) {
-  unsigned long long ts = me_tsc_read();
-  __xrw unsigned long long prev;
+unsigned long long get_time_diff_ns(__mem40 unsigned long long *last)
+{
+    unsigned long long ts;
+    unsigned long long prev;
+    unsigned long long delta_ticks;
+    unsigned long long elapsed_ns;
 
-  /* read previous timestamp from memory */
-  mem_read32(&prev, last, sizeof(prev));
+    ts = me_tsc_read();
 
-  /* compute delta in ticks */
-  unsigned long long delta_ticks = ts - prev;
+    /* read previous timestamp */
+    mem_read32(&prev, last, sizeof(prev));
 
-  /* update stored timestamp */
-  prev = ts;
-  mem_write32(&prev, last, sizeof(prev));
+    /* compute delta (make sure variables declared before this) */
+    delta_ticks = ts - prev;
 
-  /* convert ticks → nanoseconds */
-  return (unsigned long long)(delta_ticks * NS_PER_TICK);
+    /* update stored timestamp */
+    prev = ts;
+    mem_write32(&prev, last, sizeof(prev));
+
+    /* integer math: ns = ticks * (16*1000 / MHz) */
+    elapsed_ns = (delta_ticks * NS_PER_TICK_NUM) / NS_PER_TICK_DEN;
+
+    return elapsed_ns;
 }
 
 void evict_stale_entries(uint64_t threshold_ns) {
