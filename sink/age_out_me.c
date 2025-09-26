@@ -10,7 +10,10 @@
 #define IP_PROTO_TCP 0x6
 #define NUM_RINGS 8
 #define RING_SIZE (1 << 16)
-#define AGE_THRESHOLD_NS (500000000ULL)  /* 500 ms */
+// #define AGE_THRESHOLD_NS (500000000ULL)  /* 500 ms */
+#define AGE_THRESHOLD_NS (300000000000)  /* 5 minutes */
+#define ME_SPEED_MHZ 633   /* from nfp-hwinfo me.speed */
+#define NS_PER_TICK  (16.0 * 1000.0 / ME_SPEED_MHZ)  /* 16 cycles per tick, MHz to ns */
 
 typedef struct int_metric_sample {
   uint32_t node_id; /* Node ID */
@@ -67,6 +70,27 @@ __export __emem bucket_list int_flowcache[FLOWCACHE_ROWS];
 __export __emem ring_list ring_buffer_G[NUM_RINGS];
 __export __emem ring_meta ring_G[NUM_RINGS];
 
+__export __emem uint64_t debug_timestamp_curr;
+__export __emem uint64_t debug_timestamp_last;
+
+unsigned long long get_time_diff_ns(__mem40 unsigned long long *last) {
+  unsigned long long ts = me_tsc_read();
+  __xrw unsigned long long prev;
+
+  /* read previous timestamp from memory */
+  mem_read32(&prev, last, sizeof(prev));
+
+  /* compute delta in ticks */
+  unsigned long long delta_ticks = ts - prev;
+
+  /* update stored timestamp */
+  prev = ts;
+  mem_write32(&prev, last, sizeof(prev));
+
+  /* convert ticks → nanoseconds */
+  return (unsigned long long)(delta_ticks * NS_PER_TICK);
+}
+
 void evict_stale_entries(uint64_t threshold_ns) {
     __xrw ring_meta ring_meta_read;
     __volatile __addr40 __emem bucket_entry *entry;
@@ -81,6 +105,8 @@ void evict_stale_entries(uint64_t threshold_ns) {
     uint32_t k;
     uint64_t current_time;
 
+    __xrw uint64_t ts_buf;
+
     for (i = 0; i < FLOWCACHE_ROWS; i++) {
         current_time = me_tsc_read();
         for (j = 0; j < BUCKET_SIZE; j++) {
@@ -89,7 +115,14 @@ void evict_stale_entries(uint64_t threshold_ns) {
             mem_read_atomic(&last_ts_xrw, (__mem void *)&entry->last_update_timestamp, sizeof(last_ts_xrw));
             last_ts = last_ts_xrw;
 
-            if (entry->packet_count != 0 && (current_time - last_ts) > threshold_ns) {
+            // debug_timestamp_last
+            ts_buf = last_ts;
+            mem_write_atomic(&ts_buf, (__mem void *)&debug_timestamp_last, sizeof(ts_buf));
+            // debug_timestamp_curr
+            ts_buf = current_time;
+            mem_write_atomic(&ts_buf, (__mem void *)&debug_timestamp_curr, sizeof(ts_buf));
+
+            if (entry->packet_count != 0 && get_time_diff_ns(last_ts) > threshold_ns) {
                 // Determine ring index
                 ring_index = i & (NUM_RINGS - 1);
                 ring_info = &ring_G[ring_index];
