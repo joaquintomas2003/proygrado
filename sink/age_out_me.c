@@ -75,6 +75,8 @@ __export __emem ring_meta ring_G[NUM_RINGS];
 
 __export __emem uint64_t debug_timestamp_curr;
 __export __emem uint64_t debug_timestamp_last;
+__export __emem uint64_t debug_time_curr;
+__export __emem uint64_t debug_time_last;
 __export __emem uint64_t debug_time_diff;
 
 unsigned long long get_time_diff_ns(__mem40 unsigned long long *last)
@@ -101,6 +103,10 @@ unsigned long long get_time_diff_ns(__mem40 unsigned long long *last)
 
     debug_buf = elapsed_ns;
     mem_write_atomic(&debug_buf, (__mem void *)&debug_time_diff, sizeof(debug_buf));
+    debug_buf = ts;
+    mem_write_atomic(&debug_buf, (__mem void *)&debug_time_curr, sizeof(debug_buf));
+    debug_buf = prev;
+    mem_write_atomic(&debug_buf, (__mem void *)&debug_time_last, sizeof(debug_buf));
 
     return elapsed_ns;
 }
