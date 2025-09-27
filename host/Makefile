@@ -20,5 +20,8 @@ $(TARGET): $(OBJ)
 run: $(TARGET)
 	sudo ./$(TARGET)
 
+run-debug: $(TARGET)
+	sudo ./$(TARGET) -D
+
 clean:
 	rm -f $(OBJ) $(TARGET)
