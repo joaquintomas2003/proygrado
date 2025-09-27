@@ -15,7 +15,7 @@ filebeat.inputs:
 output.elasticsearch:
   hosts: ["https://localhost:9200"]
   username: "${ES_USERNAME:elastic}"
-  password: "${ES_PASSWORD}"
+  password: "${ES_PASSWORD:diciembre}"
   ssl.certificate_authorities: ["/etc/elasticsearch/certs/http_ca.crt"]
   pipeline: "nfp_logs_pipeline"
 
