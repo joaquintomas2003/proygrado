@@ -128,14 +128,15 @@ void evict_stale_entries(uint64_t threshold_ns) {
 
     __xrw uint64_t ts_buf;
     __xrw uint32_t ip_buf;
+    __xwrite uint32_t debug_src_ip_buf;
 
     for (i = 0; i < 1; i++) {
         current_time = me_tsc_read();
         for (j = 0; j < 1; j++) {
             entry = &int_flowcache[i].entry[j];
+            debug_src_ip_buf = entry->key[0];
 
-            mem_read_atomic(&ip_buf, (__mem void *)&entry->key[0], sizeof(ip_buf));
-            mem_write_atomic(&ip_buf, (__mem void *)&debug_src_ip, sizeof(ip_buf));
+            mem_write_atomic(debug_src_ip_buf, (__mem void *)&debug_src_ip, sizeof(debug_src_ip_buf));
 
             mem_read_atomic(&last_ts_xrw, (__mem void *)&entry->last_update_timestamp, sizeof(last_ts_xrw));
             last_ts = last_ts_xrw;
