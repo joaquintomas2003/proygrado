@@ -150,7 +150,7 @@ int main(int argc, char *argv[]) {
             uint32_t rp = current_ring_meta.read_pointer;
             uint32_t full = current_ring_meta.full;
 
-            if (debug) {
+            if (debug && wp != 0 && rp != 0 && full != 0) {
                 printf("Ring %d - WP: %u, RP: %u, Full: %u\n", i + 1, wp, rp, full);
             }
 
@@ -198,7 +198,7 @@ int main(int argc, char *argv[]) {
                 }
             }
 
-            if (debug) printf("  Processed %d entries from ring %d in iteration %llu\n\n", j, i + 1, loop_iteration);
+            if (debug && j != 0) printf("  Processed %d entries from ring %d in iteration %llu\n\n", j, i + 1, loop_iteration);
         }
 
         if (debug) usleep(3000);
