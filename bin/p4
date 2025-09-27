@@ -46,6 +46,7 @@ case "$COMMAND" in
       /opt/netronome/components/flowenv/me/lib/nfp/libnfp.c \
       /opt/netronome/components/standardlibrary/microc/src/rtl.c \
       /opt/netronome/components/standardlibrary/microc/src/intrinsic.c \
+      time_utils.c \
 
     echo -e "${GREEN}Compiling $P4_FILE with main.c...${NC}"
     mkdir -p "$(dirname "$FIRMWARE_PATH")" pifout
@@ -63,7 +64,7 @@ case "$COMMAND" in
       --include /opt/netronome/p4/components/flowcache/me/lib/flowcache \
       -4 "$P4_FILE" \
       --nfirc_mac_ingress_timestamp \
-      -c main.c \
+      -c main.c time_utils.c \
       --custom-load-list age_out_me.list \
       --custom-load-me i32.me0 \
       -A 52 \

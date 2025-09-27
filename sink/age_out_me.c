@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <nfp/me.h>
 #include <nfp/mem_atomic.h>
+#include "time_utils.h"
 
 #define FLOWCACHE_ROWS (1 << 18)
 #define BUCKET_SIZE 12
@@ -11,11 +12,6 @@
 #define NUM_RINGS 8
 #define RING_SIZE (1 << 16)
 #define AGE_THRESHOLD_NS (300000000000)  /* 5 minutes */
-
-/* From nfp-hwinfo: me.speed=633 */
-#define ME_SPEED_MHZ      633
-#define NS_PER_TICK_NUM   (16 * 1000ULL)   /* numerator (ns * MHz) */
-#define NS_PER_TICK_DEN   (ME_SPEED_MHZ)   /* denominator */
 
 typedef struct int_metric_sample {
   uint32_t node_id; /* Node ID */
@@ -74,19 +70,12 @@ __export __emem ring_meta ring_G[NUM_RINGS];
 
 unsigned long long get_time_diff_ns(uint64_t last)
 {
-    unsigned long long ts;
-    unsigned long long prev;
-    unsigned long long delta_ticks;
+    uint64_t ts;
     unsigned long long elapsed_ns;
-    __xrw unsigned long long xfer;
-
-    __xrw uint64_t ts_buf;
 
     ts = me_tsc_read();
 
-    delta_ticks = ts - last;
-
-    elapsed_ns = (delta_ticks * NS_PER_TICK_NUM) / NS_PER_TICK_DEN;
+    elapsed_ns = ticks_to_ns(ts) - last;
 
     return elapsed_ns;
 }

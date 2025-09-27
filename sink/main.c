@@ -1,6 +1,7 @@
 #include <nfp/mem_atomic.h>
 #include <pif_plugin.h>
 #include <std/hash.h>
+#include "time_utils.h"
 
 #define FLOWCACHE_ROWS (1 << 10)
 #define BUCKET_SIZE 12
@@ -359,7 +360,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   node_metadata_ptrs[4] = headers + PIF_PARREP_ingress__node5_metadata_OFF_LW;
 
   // Save the last update timestamp
-  ingress_timestamp = me_tsc_read();
+  ingress_timestamp = ticks_to_ns(me_tsc_read());
   mem_write_atomic(&ingress_timestamp, &entry->last_update_timestamp, sizeof(ingress_timestamp));
 
   // Increment the packet count
