@@ -10,7 +10,12 @@
 #define IP_PROTO_TCP 0x6
 #define NUM_RINGS 8
 #define RING_SIZE (1 << 16)
-#define AGE_THRESHOLD_NS (1000000000ULL)  /* 1 second for testing */
+#define AGE_THRESHOLD_NS (300000000000)  /* 5 minutes */
+
+/* From nfp-hwinfo: me.speed=633 */
+#define ME_SPEED_MHZ      633
+#define NS_PER_TICK_NUM   (16 * 1000ULL)   /* numerator (ns * MHz) */
+#define NS_PER_TICK_DEN   (ME_SPEED_MHZ)   /* denominator */
 
 typedef struct int_metric_sample {
   uint32_t node_id; /* Node ID */
@@ -67,6 +72,25 @@ __export __emem bucket_list int_flowcache[FLOWCACHE_ROWS];
 __export __emem ring_list ring_buffer_G[NUM_RINGS];
 __export __emem ring_meta ring_G[NUM_RINGS];
 
+unsigned long long get_time_diff_ns(uint64_t last)
+{
+    unsigned long long ts;
+    unsigned long long prev;
+    unsigned long long delta_ticks;
+    unsigned long long elapsed_ns;
+    __xrw unsigned long long xfer;
+
+    __xrw uint64_t ts_buf;
+
+    ts = me_tsc_read();
+
+    delta_ticks = ts - last;
+
+    elapsed_ns = (delta_ticks * NS_PER_TICK_NUM) / NS_PER_TICK_DEN;
+
+    return elapsed_ns;
+}
+
 void evict_stale_entries(uint64_t threshold_ns) {
     __xrw ring_meta ring_meta_read;
     __volatile __addr40 __emem bucket_entry *entry;
@@ -85,11 +109,9 @@ void evict_stale_entries(uint64_t threshold_ns) {
         current_time = me_tsc_read();
         for (j = 0; j < BUCKET_SIZE; j++) {
             entry = &int_flowcache[i].entry[j];
+            last_ts = entry->last_update_timestamp;
 
-            mem_read_atomic(&last_ts_xrw, (__mem void *)&entry->last_update_timestamp, sizeof(last_ts_xrw));
-            last_ts = last_ts_xrw;
-
-            if (entry->packet_count != 0 && (current_time - last_ts) > threshold_ns) {
+            if (entry->packet_count != 0 && get_time_diff_ns(last_ts) > threshold_ns) {
                 // Determine ring index
                 ring_index = i & (NUM_RINGS - 1);
                 ring_info = &ring_G[ring_index];
