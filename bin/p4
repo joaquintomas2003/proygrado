@@ -28,12 +28,25 @@ command -v /opt/netronome/p4/bin/rtecli >/dev/null 2>&1 || { echo -e "${RED}❌ 
 case "$COMMAND" in
   build)
     P4_FILE="main.p4"
+    ME_SRC="age_out_me.c"
     EXTRA_ARGS=("$@")
 
     if [ ! -f "$P4_FILE" ]; then
       echo -e "${RED}❌ File not found: $P4_FILE${NC}"
       exit 1
     fi
+
+    echo -e "${GREEN}Compiling $ME_SRC with nfcc...${NC}"
+
+    /opt/netronome/bin/nfcc -Qnctx=1 \
+      -I /opt/netronome/components/standardlibrary/microc/include \
+      -I /opt/netronome/components/flowenv/me/lib \
+      -I /opt/netronome/components/flowenv/me/include \
+      "$ME_SRC" \
+      /opt/netronome/components/flowenv/me/lib/nfp/libnfp.c \
+      /opt/netronome/components/standardlibrary/microc/src/rtl.c \
+      /opt/netronome/components/standardlibrary/microc/src/intrinsic.c \
+      time_utils.c \
 
     echo -e "${GREEN}Compiling $P4_FILE with main.c...${NC}"
     mkdir -p "$(dirname "$FIRMWARE_PATH")" pifout
@@ -51,7 +64,9 @@ case "$COMMAND" in
       --include /opt/netronome/p4/components/flowcache/me/lib/flowcache \
       -4 "$P4_FILE" \
       --nfirc_mac_ingress_timestamp \
-      -c main.c \
+      -c main.c time_utils.c \
+      --custom-load-list age_out_me.list \
+      --custom-load-me i32.me0 \
       -A 52 \
       "${EXTRA_ARGS[@]}"
 
