@@ -5,7 +5,7 @@
 #include "time_utils.h"
 #include "data_structures.h"
 
-#define AGE_THRESHOLD_NS (300000000000)  /* 5 minutes */
+#define AGE_THRESHOLD_NS (30000000000)  /* 30 seconds */
 
 __export __emem bucket_list int_flowcache[FLOWCACHE_ROWS];
 __export __emem ring_list ring_buffer_G[NUM_RINGS];
