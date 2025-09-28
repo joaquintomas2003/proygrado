@@ -1,22 +1,14 @@
 filebeat.inputs:
   - type: filestream
-    id: nfp-logs
+    id: "nfp-logs"
     enabled: true
     paths:
       - /var/log/nfp-hwdbg-srv.log
       - /var/log/nfp-sdk6-rte.log
       - /var/log/nfp-sdk6-rtelib.log
 
-    fields:
-      service: nfp
-      event.dataset: nfp.logs
-    fields_under_root: true
-
 output.elasticsearch:
   hosts: ["https://localhost:9200"]
-  username: "${ES_USERNAME:elastic}"
-  password: "${ES_PASSWORD}"
+  username: "elastic"
+  password: "diciembre"
   ssl.certificate_authorities: ["/etc/elasticsearch/certs/http_ca.crt"]
-  pipeline: "nfp_logs_pipeline"
-
-setup.ilm.enabled: false
