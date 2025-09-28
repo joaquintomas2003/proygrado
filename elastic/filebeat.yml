@@ -6,20 +6,38 @@ filebeat.inputs:
       - /var/log/nfp-hwdbg-srv.log
       - /var/log/nfp-sdk6-rte.log
       - /var/log/nfp-sdk6-rtelib.log
+    fields:
+      service: nfp
+      event.dataset: nfp.logs
+    fields_under_root: true
+
   - type: filestream
     id: "int-metrics"
     enabled: true
     paths:
       - /var/spool/int/*.ndjson
+    exclude_files: ['\.open$']
     parsers:
       - ndjson:
           add_error_key: true
           target: ""
     prospector.scanner.fingerprint.length: 64
     prospector.scanner.fingerprint.offset: 0
+    fields:
+      service: int
+      event.dataset: int.metrics
+    fields_under_root: true
 
 output.elasticsearch:
   hosts: ["https://localhost:9200"]
   username: "elastic"
   password: "diciembre"
   ssl.certificate_authorities: ["/etc/elasticsearch/certs/http_ca.crt"]
+
+  indices:
+    - index: "nfp-logs-%{+yyyy.MM.dd}"
+      when.equals:
+        event.dataset: "nfp.logs"
+    - index: "int-metrics-%{+yyyy.MM.dd}"
+      when.equals:
+        event.dataset: "int.metrics"
