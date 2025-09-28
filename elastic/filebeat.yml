@@ -6,6 +6,17 @@ filebeat.inputs:
       - /var/log/nfp-hwdbg-srv.log
       - /var/log/nfp-sdk6-rte.log
       - /var/log/nfp-sdk6-rtelib.log
+  - type: filestream
+    id: "int-metrics"
+    enabled: true
+    paths:
+      - /var/spool/int/*.ndjson
+    parsers:
+      - ndjson:
+          add_error_key: true
+          target: ""
+    prospector.scanner.fingerprint.length: 64
+    prospector.scanner.fingerprint.offset: 0
 
 output.elasticsearch:
   hosts: ["https://localhost:9200"]
