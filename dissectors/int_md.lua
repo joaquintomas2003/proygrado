@@ -145,7 +145,7 @@ function int_md.dissector(buffer, pinfo, tree)
   local rhc_val = metadata_byte3:uint()
   local present_hops = total_hops - rhc_val
 
-  for hop = 1, present_hops + 1 do
+  for hop = 1, present_hops do
     local hop_buf = buffer(offset, per_hop_len)
     local hop_tree = subtree:add("Hop Metadata #" .. hop .. " (" .. per_hop_len .. " bytes)")
 
