@@ -5,23 +5,9 @@
 #include "time_utils.h"
 #include "data_structures.h"
 
-#define AGE_THRESHOLD_NS (30000000000)  /* 30 seconds */
-
 __export __emem bucket_list int_flowcache[FLOWCACHE_ROWS];
 __export __emem ring_list ring_buffer_G[NUM_RINGS];
 __export __emem ring_meta ring_G[NUM_RINGS];
-
-unsigned long long get_time_diff_ns(uint64_t last)
-{
-    uint64_t ts;
-    unsigned long long elapsed_ns;
-
-    ts = me_tsc_read();
-
-    elapsed_ns = ticks_to_ns(ts) - last;
-
-    return elapsed_ns;
-}
 
 void evict_stale_entries(uint64_t threshold_ns) {
     __xrw ring_meta ring_meta_read;
