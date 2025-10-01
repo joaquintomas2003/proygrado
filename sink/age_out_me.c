@@ -5,10 +5,6 @@
 #include "time_utils.h"
 #include "data_structures.h"
 
-__export __emem bucket_list int_flowcache[FLOWCACHE_ROWS];
-__export __emem ring_list ring_buffer_G[NUM_RINGS];
-__export __emem ring_meta ring_G[NUM_RINGS];
-
 void evict_stale_entries(uint64_t threshold_ns) {
     __xrw ring_meta ring_meta_read;
     __volatile __addr40 __emem bucket_entry *entry;
@@ -24,6 +20,7 @@ void evict_stale_entries(uint64_t threshold_ns) {
     uint64_t current_time;
 
     for (i = 0; i < FLOWCACHE_ROWS; i++) {
+      semaphore_down(&global_semaphores[i]);
         current_time = me_tsc_read();
         for (j = 0; j < BUCKET_SIZE; j++) {
             entry = &int_flowcache[i].entry[j];
@@ -32,6 +29,7 @@ void evict_stale_entries(uint64_t threshold_ns) {
             if (entry->packet_count != 0 && get_time_diff_ns(last_ts) > threshold_ns) {
                 // Determine ring index
                 ring_index = i & (NUM_RINGS - 1);
+                semaphore_down(&ring_buffer_sem_G[ring_index]);
                 ring_info = &ring_G[ring_index];
 
                 mem_read_atomic(&ring_meta_read, (__mem void *)ring_info, sizeof(ring_meta_read));
@@ -76,52 +74,54 @@ void evict_stale_entries(uint64_t threshold_ns) {
                         sizeof(node_cnt_buf));
                   }
 
-                    // Copy per-node data
-                    for (k = 0; k < entry->int_metric_info_value.node_count && k < MAX_INT_NODES; k++) {
-                      __xrw int_metric_sample tmp_latest;
-                      __xrw int_metric_sample tmp_avg;
+                  // Copy per-node data
+                  for (k = 0; k < entry->int_metric_info_value.node_count && k < MAX_INT_NODES; k++) {
+                    __xrw int_metric_sample tmp_latest;
+                    __xrw int_metric_sample tmp_avg;
 
-                      // Copy latest[k]
-                      tmp_latest = entry->int_metric_info_value.latest[k];
-                      mem_write_atomic(&tmp_latest,
-                          (__mem void *)&r_entry->int_metric_info_value.latest[k],
-                          sizeof(tmp_latest));
+                    // Copy latest[k]
+                    tmp_latest = entry->int_metric_info_value.latest[k];
+                    mem_write_atomic(&tmp_latest,
+                        (__mem void *)&r_entry->int_metric_info_value.latest[k],
+                        sizeof(tmp_latest));
 
-                      // Copy average[k]
-                      tmp_avg = entry->int_metric_info_value.average[k];
-                      mem_write_atomic(&tmp_avg,
-                          (__mem void *)&r_entry->int_metric_info_value.average[k],
-                          sizeof(tmp_avg));
-                    }
+                    // Copy average[k]
+                    tmp_avg = entry->int_metric_info_value.average[k];
+                    mem_write_atomic(&tmp_avg,
+                        (__mem void *)&r_entry->int_metric_info_value.average[k],
+                        sizeof(tmp_avg));
+                  }
 
-                    // Advance write pointer
-                    wp = (wp + 1) & (RING_SIZE - 1);
-                    if (wp == rp) f = 1;
+                  // Advance write pointer
+                  wp = (wp + 1) & (RING_SIZE - 1);
+                  if (wp == rp) f = 1;
 
-                    // Free the bucket
-                    {
-                      __xrw uint32_t zero_xrw = 0;
-                      mem_write_atomic(&zero_xrw,
-                          (__mem void *)&entry->packet_count,
-                          sizeof(zero_xrw));
-                    }
+                  // Free the bucket
+                  {
+                    __xrw uint32_t zero_xrw = 0;
+                    mem_write_atomic(&zero_xrw,
+                        (__mem void *)&entry->packet_count,
+                        sizeof(zero_xrw));
+                  }
 
-                    {
-                      __xrw uint32_t key_reset_xrw[4] = {0};
-                      mem_write_atomic(&key_reset_xrw,
-                          (__mem void *)&entry->key,
-                          sizeof(key_reset_xrw));
-                    }
+                  {
+                    __xrw uint32_t key_reset_xrw[4] = {0};
+                    mem_write_atomic(&key_reset_xrw,
+                        (__mem void *)&entry->key,
+                        sizeof(key_reset_xrw));
+                  }
 
-                    // Update ring metadata
-                    ring_meta_read.write_pointer = wp;
-                    ring_meta_read.full = f;
-                    mem_write_atomic(&ring_meta_read,
-                        (__mem void *)ring_info,
-                        sizeof(ring_meta_read));
+                  // Update ring metadata
+                  ring_meta_read.write_pointer = wp;
+                  ring_meta_read.full = f;
+                  mem_write_atomic(&ring_meta_read,
+                      (__mem void *)ring_info,
+                      sizeof(ring_meta_read));
                 }
+                semaphore_up(&ring_buffer_sem_G[ring_index]);
             }
         }
+      semaphore_up(&global_semaphores[i]);
     }
 }
 
