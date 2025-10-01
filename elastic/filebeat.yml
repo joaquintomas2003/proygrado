@@ -28,16 +28,6 @@ filebeat.inputs:
       event.dataset: int.metrics
     fields_under_root: true
 
-output.elasticsearch:
-  hosts: ["https://localhost:9200"]
-  username: "elastic"
-  password: "diciembre"
-  ssl.certificate_authorities: ["/etc/elasticsearch/certs/http_ca.crt"]
-
-  indices:
-    - index: "nfp-logs-%{+yyyy.MM.dd}"
-      when.equals:
-        event.dataset: "nfp.logs"
-    - index: "int-metrics-%{+yyyy.MM.dd}"
-      when.equals:
-        event.dataset: "int.metrics"
+output.logstash:
+  hosts: ["localhost:5044"]
+  ssl.enabled: false
