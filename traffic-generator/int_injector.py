@@ -67,25 +67,57 @@ def exp_int_sample(scale, max_value, rng=random):
 
 def gen_metadata_field_for_name(name, params, rng=random):
     if name == "hop_latency":
-        # use microseconds / nanoseconds depending on your desired unit - we'll use microseconds here
-        return exp_int_sample(params.get("hop_latency_mean", 200.0), params.get("hop_latency_max", 5000), rng)
+        # hop latency in microseconds
+        return exp_int_sample(
+            params.get("hop_latency_mean", 200.0),
+            params.get("hop_latency_max", 5000),
+            rng,
+        )
+
     if name == "queue_info":
-        return exp_int_sample(params.get("queue_mean", 10.0), params.get("queue_max", 300), rng)
+        # 8 bits queue ID + 24 bits occupancy
+        qid = rng.randint(0, 255)  # 8 bits
+        occ = int(
+            exp_int_sample(
+                params.get("queue_mean", 10.0),
+                params.get("queue_max", 300),
+                rng,
+            )
+        )
+        occ = min(occ, (1 << 24) - 1)
+        return (qid << 24) | occ
+
     if name in ("ing_ts", "eg_ts"):
-        # timestamp-like: use 64-bit ns counter (randomly close)
-        # we generate a 64-bit integer limited to some reasonable window
-        return rng.getrandbits(48)  # 48 bits gives large range; you can tune
-    if name in ("iface_l1", "iface_l2"):
-        return rng.randint(0, 2**(8 if name=="iface_l2" else 32) - 1)
+        # 64-bit timestamp-like field
+        return rng.getrandbits(64)
+
+    if name == "iface_l1":
+        # 16 bits ingress + 16 bits egress
+        ing = rng.randint(0, (1 << 16) - 1)
+        eg = rng.randint(0, (1 << 16) - 1)
+        return (ing << 16) | eg
+
+    if name == "iface_l2":
+        # 32 bits ingress + 32 bits egress
+        ing = rng.randint(0, (1 << 32) - 1)
+        eg = rng.randint(0, (1 << 32) - 1)
+        return (ing << 32) | eg
+
     if name == "tx_util":
-        # 0..100 percent (map into 32-bit field)
+        # utilization percent (0–100) mapped into 32 bits
         return rng.randint(0, 100)
+
     if name == "buffer_info":
-        return rng.randint(0, 2**32 - 1)
+        # 8 bits buffer ID + 24 bits occupancy
+        bid = rng.randint(0, 255)
+        occ = rng.randint(0, (1 << 24) - 1)
+        return (bid << 24) | occ
+
     if name == "checksum_comp":
-        return rng.randint(0, 2**32 - 1)
-    # fallback 32-bit random
-    return rng.randint(0, 2**32 - 1)
+        return rng.randint(0, (1 << 32) - 1)
+
+    # default: 32-bit random
+    return rng.randint(0, (1 << 32) - 1)
 
 def generate_metadata_for_hop(node_id, instruction_bitmap, params, rng=random):
     metadata = b""
