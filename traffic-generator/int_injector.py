@@ -91,7 +91,6 @@ def process_trace(cfg):
         packets = packets[:limit]
         print(f"Using first {len(packets)} packets (limit configured)")
 
-    # writer = PcapWriter(output_pcap, append=False, sync=True)
     output_packets = []
     written = 0
 
@@ -121,9 +120,9 @@ def process_trace(cfg):
         else:
             eth = Ether()
 
-        # Keep original IP header but we will encapsulate in UDP -> then append RAW containing INT shim+md+metadata and the original transport bytes
-        ip = pkt[IP].copy()
-        ip.proto = 17  # UDP
+
+        outer_ip = IP(src=pkt[IP].src, dst=pkt[IP].dst, ttl=pkt[IP].ttl, proto=17)
+
         # Create INT UDP outer header
         # get src port of original packet if possible, otherwise random
         if pkt.haslayer(UDP):
@@ -141,20 +140,8 @@ def process_trace(cfg):
         int_payload = shim + md_header + metadata_stack + orig_transport_and_payload
 
         # Compose final frame: Ether / IP / UDP (INT) / Raw(int_payload)
-        new_pkt = eth / ip / udp_int / Raw(int_payload)
+        new_pkt = eth / outer_ip / udp_int / Raw(int_payload)
 
-        # # Let Scapy recompute lengths/checksums when converting to bytes
-        # raw_bytes = bytes(new_pkt)
-        #
-        # pkt = Ether(raw_bytes)
-
-        # Delete len/chksum so Scapy recomputes them
-        # for layer in [IP, UDP]:
-        #     if new_pkt.haslayer(layer):
-        #         if hasattr(new_pkt[layer], "len"): del new_pkt[layer].len
-        #         if hasattr(new_pkt[layer], "chksum"): del new_pkt[layer].chksum
-
-        # writer.write(new_pkt)
         output_packets.append(new_pkt)
         written += 1
 
