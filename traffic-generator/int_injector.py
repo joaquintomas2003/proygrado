@@ -1,3 +1,15 @@
+from scapy.all import Ether, IP, TCP, UDP, Raw, wrpcap, rdpcap, PcapWriter
+import os
+import random
+import struct
+import yaml
+import ipaddress
+
+INT_UDP_DST_PORT = 5000  # arbitrary INT UDP port
+ORIGINAL_PROTO = 6        # TCP
+INT_TYPE = 1              # 1 = INT-MD
+NPT_L4 = 2                # indicates that another (the original) L4 header follows the INT stack
+
 # Bit: (Field, Length)
 INSTRUCTION_FIELDS = {
     0: ("node_id", 4),
@@ -63,7 +75,97 @@ def generate_metadata_for_hop(node_id, instruction_bitmap):
 def build_metadata_stack(hops, instruction_bitmap):
     return b"".join(generate_metadata_for_hop(h, instruction_bitmap) for h in hops)
 
+def process_trace(cfg):
+    input_pcap = cfg["input_pcap"]
+    output_pcap = cfg["output_pcap"]
+    int_udp_dst_port = cfg.get("int_udp_dst_port", 5000)
+
+    print(f"Loading {input_pcap} ...")
+    in_packets = rdpcap(input_pcap)
+    print(f"Read {len(in_packets)} packets")
+
+    limit = cfg.get("num_packets", None)
+    if limit:
+        in_packets = in_packets[:limit]
+        print(f"Using first {len(in_packets)} packets (limit configured)")
+
+    out_packets = []
+    written = 0
+
+    for idx, pkt in enumerate(in_packets):
+        if not pkt.haslayer(IP):
+            continue
+
+        # --- metadata config ---
+        hop_ids = cfg.get("hops", [1,2,3,4,5])
+        num_hops = len(hop_ids)
+        chosen_bits = cfg.get("instruction_bits", [0, 2, 3, 7])
+        instruction_bitmap = build_instruction_bitmap(chosen_bits)
+        hop_ml = compute_hop_ml(instruction_bitmap)
+
+        # build shim and md header
+        original_proto = pkt[IP].proto
+        shim = build_int_shim(hop_ml, num_hops, original_proto)
+        md_header = build_int_md_header(hop_ml, rhc=0, instruction_bitmap=instruction_bitmap)
+        metadata_stack = build_metadata_stack(hop_ids, instruction_bitmap)
+
+        # original L4 bytes (transport header + payload)
+        orig_transport_and_payload = bytes(pkt[IP].payload)
+
+        # final raw payload for INT
+        int_payload = shim + md_header + metadata_stack + orig_transport_and_payload
+
+        # Build L2: preserve MACs if present, but ensure eth.type == IPv4
+        if pkt.haslayer(Ether):
+            eth = Ether(src=pkt[Ether].src, dst=pkt[Ether].dst, type=0x0800)
+        else:
+            eth = Ether(type=0x0800)
+
+        # Fresh outer IP (proto=17)
+        outer_ip = IP(src=pkt[IP].src, dst=pkt[IP].dst, ttl=pkt[IP].ttl, proto=17)
+
+        # Outer UDP
+        if pkt.haslayer(UDP):
+            src_port = pkt[UDP].sport
+        elif pkt.haslayer(TCP):
+            src_port = pkt[TCP].sport
+        else:
+            src_port = random.randint(1024, 65535)
+        udp_int = UDP(sport=src_port, dport=int_udp_dst_port)
+
+        # Compose
+        new_pkt = eth / outer_ip / udp_int / Raw(int_payload)
+
+        # Force recompute: serialize and reparse
+        try:
+            raw = bytes(new_pkt)
+            new_pkt = Ether(raw)
+        except Exception as e:
+            # fallback: delete stale fields and try again
+            for L in [IP, UDP]:
+                if new_pkt.haslayer(L):
+                    try:
+                        delattr(new_pkt[L], "len")
+                    except Exception:
+                        pass
+                    try:
+                        delattr(new_pkt[L], "chksum")
+                    except Exception:
+                        pass
+            raw = bytes(new_pkt)
+            new_pkt = Ether(raw)
+
+        out_packets.append(new_pkt)
+        written += 1
+
+    wrpcap(output_pcap, out_packets)
+    print(f"Done. Wrote {written} packets to {output_pcap}")
+
 def load_config():
     path = os.path.join(os.path.dirname(__file__), "config.yaml")
     with open(path, "r") as f:
         return yaml.safe_load(f)
+
+if __name__ == "__main__":
+    cfg = load_config()
+    process_trace(cfg)
