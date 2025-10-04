@@ -155,23 +155,6 @@ def process_trace(cfg):
             raw = bytes(new_pkt)
             new_pkt = Ether(raw)
 
-        # DEBUG: print first packet info once
-        if written == 0:
-            print(">>> DEBUG new_pkt.show2():")
-            new_pkt.show2()
-            b = bytes(new_pkt)
-            print(">>> first 96 bytes hex:")
-            print(b[:96].hex())
-            # compute offsets
-            eth_len = 14
-            ip_ihl = (b[14] & 0x0f) * 4
-            udp_offset = eth_len + ip_ihl
-            print(f">>> computed ip_ihl={ip_ihl}, udp_offset={udp_offset}")
-            # UDP ports are at udp_offset, udp_offset+2
-            srcp = int.from_bytes(b[udp_offset:udp_offset+2], "big")
-            dstp = int.from_bytes(b[udp_offset+2:udp_offset+4], "big")
-            print(f">>> UDP ports from bytes: src={srcp} dst={dstp}")
-
         out_packets.append(new_pkt)
         written += 1
 
