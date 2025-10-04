@@ -4,6 +4,7 @@ import random
 import struct
 import yaml
 import ipaddress
+import math
 
 INT_UDP_DST_PORT = 5000  # arbitrary INT UDP port
 ORIGINAL_PROTO = 6        # TCP
@@ -55,7 +56,38 @@ def build_int_md_header(hop_ml, rhc, instruction_bitmap):
 
     return part1 + part2 + part3
 
-def generate_metadata_for_hop(node_id, instruction_bitmap):
+
+def exp_int_sample(scale, max_value, rng=random):
+    if scale <= 0:
+        return 0
+    u = rng.random()
+    val = -scale * math.log(1.0 - u)  # exponential with mean=scale
+    v_int = int(min(max_value, max(0, round(val))))
+    return v_int
+
+def gen_metadata_field_for_name(name, params, rng=random):
+    if name == "hop_latency":
+        # use microseconds / nanoseconds depending on your desired unit - we'll use microseconds here
+        return exp_int_sample(params.get("hop_latency_mean", 200.0), params.get("hop_latency_max", 5000), rng)
+    if name == "queue_info":
+        return exp_int_sample(params.get("queue_mean", 10.0), params.get("queue_max", 300), rng)
+    if name in ("ing_ts", "eg_ts"):
+        # timestamp-like: use 64-bit ns counter (randomly close)
+        # we generate a 64-bit integer limited to some reasonable window
+        return rng.getrandbits(48)  # 48 bits gives large range; you can tune
+    if name in ("iface_l1", "iface_l2"):
+        return rng.randint(0, 2**(8 if name=="iface_l2" else 32) - 1)
+    if name == "tx_util":
+        # 0..100 percent (map into 32-bit field)
+        return rng.randint(0, 100)
+    if name == "buffer_info":
+        return rng.randint(0, 2**32 - 1)
+    if name == "checksum_comp":
+        return rng.randint(0, 2**32 - 1)
+    # fallback 32-bit random
+    return rng.randint(0, 2**32 - 1)
+
+def generate_metadata_for_hop(node_id, instruction_bitmap, params, rng=random):
     metadata = b""
     for bit in range(16):
         if instruction_bitmap & (1 << (15 - bit)):
@@ -63,22 +95,31 @@ def generate_metadata_for_hop(node_id, instruction_bitmap):
             if name == "node_id":
                 value = node_id
                 metadata += struct.pack("!I", value)
-            elif name == "hop_latency":
-                value = random.randint(100, 1000)
-                metadata += struct.pack("!I", value)
-            elif size == 4:
-                metadata += struct.pack("!I", random.randint(0, 2**32 - 1))
-            elif size == 8:
-                metadata += struct.pack("!Q", random.randint(0, 2**64 - 1))
+            else:
+                value = gen_metadata_field_for_name(name, params, rng)
+                if size == 4:
+                    metadata += struct.pack("!I", value & 0xffffffff)
+                elif size == 8:
+                    metadata += struct.pack("!Q", value & 0xffffffffffffffff)
     return metadata
 
-def build_metadata_stack(hops, instruction_bitmap):
-    return b"".join(generate_metadata_for_hop(h, instruction_bitmap) for h in hops)
+def build_metadata_stack(hops, instruction_bitmap, params, rng):
+    return b"".join(generate_metadata_for_hop(h, instruction_bitmap, params, rng) for h in hops)
 
 def process_trace(cfg):
     input_pcap = cfg["input_pcap"]
     output_pcap = cfg["output_pcap"]
     int_udp_dst_port = cfg.get("int_udp_dst_port", 5000)
+
+    rng = random.Random(cfg.get("random_seed", None))
+
+    # distribution params for metadata generator
+    params = cfg.get("distributions", {
+        "hop_latency_mean": 200.0,
+        "hop_latency_max": 5000,
+        "queue_mean": 10.0,
+        "queue_max": 300,
+    })
 
     print(f"Loading {input_pcap} ...")
     in_packets = rdpcap(input_pcap)
@@ -107,7 +148,7 @@ def process_trace(cfg):
         original_proto = pkt[IP].proto
         shim = build_int_shim(hop_ml, num_hops, original_proto)
         md_header = build_int_md_header(hop_ml, rhc=0, instruction_bitmap=instruction_bitmap)
-        metadata_stack = build_metadata_stack(hop_ids, instruction_bitmap)
+        metadata_stack = build_metadata_stack(hop_ids, instruction_bitmap, params, rng)
 
         # original L4 bytes (transport header + payload)
         orig_transport_and_payload = bytes(pkt[IP].payload)
@@ -130,7 +171,7 @@ def process_trace(cfg):
         elif pkt.haslayer(TCP):
             src_port = pkt[TCP].sport
         else:
-            src_port = random.randint(1024, 65535)
+            src_port = rng.randint(1024, 65535)
         udp_int = UDP(sport=src_port, dport=int_udp_dst_port)
 
         # Compose
