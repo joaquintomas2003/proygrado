@@ -81,50 +81,50 @@ def process_trace(cfg):
     int_udp_dst_port = cfg.get("int_udp_dst_port", 5000)
 
     print(f"Loading {input_pcap} ...")
-    packets = rdpcap(input_pcap)
-    total = len(packets)
-    print(f"Read {total} packets")
+    in_packets = rdpcap(input_pcap)
+    print(f"Read {len(in_packets)} packets")
 
-    # limit number of packets if asked
     limit = cfg.get("num_packets", None)
     if limit:
-        packets = packets[:limit]
-        print(f"Using first {len(packets)} packets (limit configured)")
+        in_packets = in_packets[:limit]
+        print(f"Using first {len(in_packets)} packets (limit configured)")
 
-    output_packets = []
+    out_packets = []
     written = 0
 
-    for idx, pkt in enumerate(packets):
+    for idx, pkt in enumerate(in_packets):
         if not pkt.haslayer(IP):
             continue
 
+        # --- metadata config ---
         hop_ids = cfg.get("hops", [1,2,3,4,5])
         num_hops = len(hop_ids)
-
         chosen_bits = cfg.get("instruction_bits", [0, 2, 3, 7])
         instruction_bitmap = build_instruction_bitmap(chosen_bits)
-
         hop_ml = compute_hop_ml(instruction_bitmap)
 
         # build shim and md header
         original_proto = pkt[IP].proto
         shim = build_int_shim(hop_ml, num_hops, original_proto)
         md_header = build_int_md_header(hop_ml, rhc=0, instruction_bitmap=instruction_bitmap)
-
         metadata_stack = build_metadata_stack(hop_ids, instruction_bitmap)
 
-        # Build new packet:
-        # Keep original L2 if present, otherwise build a basic Ether header
+        # original L4 bytes (transport header + payload)
+        orig_transport_and_payload = bytes(pkt[IP].payload)
+
+        # final raw payload for INT
+        int_payload = shim + md_header + metadata_stack + orig_transport_and_payload
+
+        # Build L2: preserve MACs if present, but ensure eth.type == IPv4
         if pkt.haslayer(Ether):
-            eth = pkt[Ether].copy()
+            eth = Ether(src=pkt[Ether].src, dst=pkt[Ether].dst, type=0x0800)
         else:
-            eth = Ether()
+            eth = Ether(type=0x0800)
 
-
+        # Fresh outer IP (proto=17)
         outer_ip = IP(src=pkt[IP].src, dst=pkt[IP].dst, ttl=pkt[IP].ttl, proto=17)
 
-        # Create INT UDP outer header
-        # get src port of original packet if possible, otherwise random
+        # Outer UDP
         if pkt.haslayer(UDP):
             src_port = pkt[UDP].sport
         elif pkt.haslayer(TCP):
@@ -133,23 +133,49 @@ def process_trace(cfg):
             src_port = random.randint(1024, 65535)
         udp_int = UDP(sport=src_port, dport=int_udp_dst_port)
 
-        # Original L4 bytes (transport header + payload)
-        orig_transport_and_payload = bytes(pkt[IP].payload)
-
-        # Compose final raw payload: shim + md_header + metadata_stack + original_transport_and_payload
-        int_payload = shim + md_header + metadata_stack + orig_transport_and_payload
-
-        # Compose final frame: Ether / IP / UDP (INT) / Raw(int_payload)
+        # Compose
         new_pkt = eth / outer_ip / udp_int / Raw(int_payload)
 
-        output_packets.append(new_pkt)
+        # Force recompute: serialize and reparse
+        try:
+            raw = bytes(new_pkt)
+            new_pkt = Ether(raw)
+        except Exception as e:
+            # fallback: delete stale fields and try again
+            for L in [IP, UDP]:
+                if new_pkt.haslayer(L):
+                    try:
+                        delattr(new_pkt[L], "len")
+                    except Exception:
+                        pass
+                    try:
+                        delattr(new_pkt[L], "chksum")
+                    except Exception:
+                        pass
+            raw = bytes(new_pkt)
+            new_pkt = Ether(raw)
+
+        # DEBUG: print first packet info once
+        if written == 0:
+            print(">>> DEBUG new_pkt.show2():")
+            new_pkt.show2()
+            b = bytes(new_pkt)
+            print(">>> first 96 bytes hex:")
+            print(b[:96].hex())
+            # compute offsets
+            eth_len = 14
+            ip_ihl = (b[14] & 0x0f) * 4
+            udp_offset = eth_len + ip_ihl
+            print(f">>> computed ip_ihl={ip_ihl}, udp_offset={udp_offset}")
+            # UDP ports are at udp_offset, udp_offset+2
+            srcp = int.from_bytes(b[udp_offset:udp_offset+2], "big")
+            dstp = int.from_bytes(b[udp_offset+2:udp_offset+4], "big")
+            print(f">>> UDP ports from bytes: src={srcp} dst={dstp}")
+
+        out_packets.append(new_pkt)
         written += 1
 
-        if (idx + 1) % 10000 == 0:
-            print(f"Processed {idx+1}/{len(packets)} packets...")
-
-    wrpcap(output_pcap, output_packets)
-    # writer.close()
+    wrpcap(output_pcap, out_packets)
     print(f"Done. Wrote {written} packets to {output_pcap}")
 
 def load_config():
