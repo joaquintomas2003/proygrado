@@ -91,7 +91,8 @@ def process_trace(cfg):
         packets = packets[:limit]
         print(f"Using first {len(packets)} packets (limit configured)")
 
-    writer = PcapWriter(output_pcap, append=False, sync=True)
+    # writer = PcapWriter(output_pcap, append=False, sync=True)
+    packets = []
     written = 0
 
     for idx, pkt in enumerate(packets):
@@ -153,13 +154,15 @@ def process_trace(cfg):
         #         if hasattr(new_pkt[layer], "len"): del new_pkt[layer].len
         #         if hasattr(new_pkt[layer], "chksum"): del new_pkt[layer].chksum
 
-        writer.write(new_pkt)
+        # writer.write(new_pkt)
+        packets.append(new_pkt)
         written += 1
 
         if (idx + 1) % 10000 == 0:
             print(f"Processed {idx+1}/{len(packets)} packets...")
 
-    writer.close()
+    wrpcap(output_pcap, packets)
+    # writer.close()
     print(f"Done. Wrote {written} packets to {output_pcap}")
 
 def load_config():
