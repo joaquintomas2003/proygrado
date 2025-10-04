@@ -1,3 +1,15 @@
+from scapy.all import Ether, IP, TCP, UDP, Raw, wrpcap, rdpcap, PcapWriter
+import os
+import random
+import struct
+import yaml
+import ipaddress
+
+INT_UDP_DST_PORT = 5000  # arbitrary INT UDP port
+ORIGINAL_PROTO = 6        # TCP
+INT_TYPE = 1              # 1 = INT-MD
+NPT_L4 = 2                # indicates that another (the original) L4 header follows the INT stack
+
 # Bit: (Field, Length)
 INSTRUCTION_FIELDS = {
     0: ("node_id", 4),
@@ -63,7 +75,98 @@ def generate_metadata_for_hop(node_id, instruction_bitmap):
 def build_metadata_stack(hops, instruction_bitmap):
     return b"".join(generate_metadata_for_hop(h, instruction_bitmap) for h in hops)
 
+def process_trace(cfg):
+    input_pcap = cfg["input_pcap"]
+    output_pcap = cfg["output_pcap"]
+    int_udp_dst_port = cfg.get("int_udp_dst_port", 5000)
+
+    print(f"Loading {input_pcap} ...")
+    packets = rdpcap(input_pcap)
+    total = len(packets)
+    print(f"Read {total} packets")
+
+    # limit number of packets if asked
+    limit = cfg.get("num_packets", None)
+    if limit:
+        packets = packets[:limit]
+        print(f"Using first {len(packets)} packets (limit configured)")
+
+    writer = PcapWriter(output_pcap, append=False, sync=True)
+    written = 0
+
+    for idx, pkt in enumerate(packets):
+        if not pkt.haslayer(IP):
+            continue
+
+        hop_ids = cfg.get("hops", [1,2,3,4,5])
+        num_hops = len(hop_ids)
+
+        chosen_bits = cfg.get("instruction_bits", [0, 2, 3, 7])
+        instruction_bitmap = build_instruction_bitmap(chosen_bits)
+
+        hop_ml = compute_hop_ml(instruction_bitmap)
+
+        # build shim and md header
+        original_proto = pkt[IP].proto
+        shim = build_int_shim(hop_ml, num_hops, original_proto)
+        md_header = build_int_md_header(hop_ml, rhc=0, instruction_bitmap=instruction_bitmap)
+
+        metadata_stack = build_metadata_stack(hop_ids, instruction_bitmap)
+
+        # Build new packet:
+        # Keep original L2 if present, otherwise build a basic Ether header
+        if pkt.haslayer(Ether):
+            eth = pkt[Ether].copy()
+        else:
+            eth = Ether()
+
+        # Keep original IP header but we will encapsulate in UDP -> then append RAW containing INT shim+md+metadata and the original transport bytes
+        ip = pkt[IP].copy()
+        ip.proto = 17  # UDP
+        # Create INT UDP outer header
+        # get src port of original packet if possible, otherwise random
+        if pkt.haslayer(UDP):
+            src_port = pkt[UDP].sport
+        elif pkt.haslayer(TCP):
+            src_port = pkt[TCP].sport
+        else:
+            src_port = random.randint(1024, 65535)
+        udp_int = UDP(sport=src_port, dport=int_udp_dst_port)
+
+        # Original L4 bytes (transport header + payload)
+        orig_transport_and_payload = bytes(pkt[IP].payload)
+
+        # Compose final raw payload: shim + md_header + metadata_stack + original_transport_and_payload
+        int_payload = shim + md_header + metadata_stack + orig_transport_and_payload
+
+        # Compose final frame: Ether / IP / UDP (INT) / Raw(int_payload)
+        new_pkt = eth / ip / udp_int / Raw(int_payload)
+
+        # # Let Scapy recompute lengths/checksums when converting to bytes
+        # raw_bytes = bytes(new_pkt)
+        #
+        # pkt = Ether(raw_bytes)
+
+        # Delete len/chksum so Scapy recomputes them
+        # for layer in [IP, UDP]:
+        #     if new_pkt.haslayer(layer):
+        #         if hasattr(new_pkt[layer], "len"): del new_pkt[layer].len
+        #         if hasattr(new_pkt[layer], "chksum"): del new_pkt[layer].chksum
+
+        writer.write(new_pkt)
+        written += 1
+
+        if (idx + 1) % 10000 == 0:
+            print(f"Processed {idx+1}/{len(packets)} packets...")
+
+    writer.close()
+    print(f"Done. Wrote {written} packets to {output_pcap}")
+
 def load_config():
     path = os.path.join(os.path.dirname(__file__), "config.yaml")
     with open(path, "r") as f:
         return yaml.safe_load(f)
+
+if __name__ == "__main__":
+    cfg = load_config()
+    process_trace(cfg)
