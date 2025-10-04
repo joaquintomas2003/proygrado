@@ -92,7 +92,7 @@ def process_trace(cfg):
         print(f"Using first {len(packets)} packets (limit configured)")
 
     # writer = PcapWriter(output_pcap, append=False, sync=True)
-    out_packets = []
+    output_packets = []
     written = 0
 
     for idx, pkt in enumerate(packets):
