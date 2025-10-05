@@ -9,7 +9,6 @@ import math
 INT_UDP_DST_PORT = 5000  # arbitrary INT UDP port
 ORIGINAL_PROTO = 6        # TCP
 INT_TYPE = 1              # 1 = INT-MD
-NPT_L4 = 2                # indicates that another (the original) L4 header follows the INT stack
 
 # Bit: (Field, Length)
 INSTRUCTION_FIELDS = {
@@ -36,11 +35,36 @@ def compute_hop_ml(bitmap: int) -> int:
                       if bitmap & (1 << (15 - bit)))
     return total_bytes // 4
 
-def build_int_shim(hop_ml, num_hops, original_proto):
-    # Type(4b)=1, NPT(2b)=2, Reserved(2b)=0 => 0b0001_10_00 = 0x18
-    shim_type = (INT_TYPE << 4) | (NPT_L4 << 2)
+def build_int_shim(hop_ml, num_hops, npt, orig_udp_dport=None, orig_ip_proto=None):
+    """
+    Build INT shim header (RFC/spec-compliant).
+
+    Args:
+        hop_ml: hop metadata length in 4B words
+        num_hops: number of hops
+        npt: Next Protocol Type (0, 1, or 2 - 0 not supported here)
+        orig_udp_dport: required if npt=1
+        orig_ip_proto: required if npt=2
+    """
+    # ---- First byte: Type (4b), NPT (2b), Reserved (2b)
+    shim_type = (INT_TYPE << 4) | (npt << 2)
+
+    # ---- Length (in 4B words, not counting shim itself)
     shim_len = 3 + hop_ml * num_hops # INT-MD header + metadata stack
-    return struct.pack("!BBH", shim_type, shim_len, original_proto)
+
+    # ---- Last 16 bits: depends on NPT
+    if npt == 1:
+        if orig_udp_dport is None:
+            raise ValueError("NPT=1 requires orig_udp_dport")
+        last16 = orig_udp_dport
+    elif npt == 2:
+        if orig_ip_proto is None:
+            raise ValueError("NPT=2 requires orig_ip_proto")
+        last16 = orig_ip_proto  # spec: high byte reserved=0, low byte=proto
+    else:
+        raise ValueError(f"Invalid NPT={npt}")
+
+    return struct.pack("!BBH", shim_type, shim_len, last16)
 
 def build_int_md_header(hop_ml, rhc, instruction_bitmap):
     ver_d_e_m = 0x20  # version=2, D=0, E=0, M=0
@@ -151,7 +175,7 @@ def process_trace(cfg):
         "hop_latency_max": 5000,
         "queue_mean": 10.0,
         "queue_max": 300,
-    })
+        })
 
     print(f"Loading {input_pcap} ...")
     in_packets = rdpcap(input_pcap)
@@ -176,17 +200,6 @@ def process_trace(cfg):
         instruction_bitmap = build_instruction_bitmap(chosen_bits)
         hop_ml = compute_hop_ml(instruction_bitmap)
 
-        # build shim and md header
-        original_proto = pkt[IP].proto
-        shim = build_int_shim(hop_ml, num_hops, original_proto)
-        md_header = build_int_md_header(hop_ml, rhc=0, instruction_bitmap=instruction_bitmap)
-        metadata_stack = build_metadata_stack(hop_ids, instruction_bitmap, params, rng)
-
-        # original L4 bytes (transport header + payload)
-        orig_transport_and_payload = bytes(pkt[IP].payload)
-
-        # final raw payload for INT
-        int_payload = shim + md_header + metadata_stack + orig_transport_and_payload
 
         # Build L2: preserve MACs if present, but ensure eth.type == IPv4
         if pkt.haslayer(Ether):
@@ -194,20 +207,54 @@ def process_trace(cfg):
         else:
             eth = Ether(type=0x0800)
 
-        # Fresh outer IP (proto=17)
-        outer_ip = IP(src=pkt[IP].src, dst=pkt[IP].dst, ttl=pkt[IP].ttl, proto=17)
+        md_header = build_int_md_header(hop_ml, rhc=0, instruction_bitmap=instruction_bitmap)
+        metadata_stack = build_metadata_stack(hop_ids, instruction_bitmap, params, rng)
 
-        # Outer UDP
+        # ----------------
+        # Case 1: original already has UDP
+        # ----------------
         if pkt.haslayer(UDP):
-            src_port = pkt[UDP].sport
-        elif pkt.haslayer(TCP):
-            src_port = pkt[TCP].sport
-        else:
-            src_port = rng.randint(1024, 65535)
-        udp_int = UDP(sport=src_port, dport=int_udp_dst_port)
+            orig_dport = pkt[UDP].dport
+            orig_payload = bytes(pkt[UDP].payload)
 
-        # Compose
-        new_pkt = eth / outer_ip / udp_int / Raw(int_payload)
+            # shim stores original dport for sink restoration
+            shim = build_int_shim(hop_ml, num_hops, npt=1, orig_udp_dport=orig_dport)
+
+            int_payload = shim + md_header + metadata_stack + orig_payload
+
+            udp_int = UDP(sport=pkt[UDP].sport, dport=int_udp_dst_port)
+            udp_int.chksum = 0  # recommended for INT UDP
+
+            outer_ip = IP(src=pkt[IP].src, dst=pkt[IP].dst, ttl=pkt[IP].ttl, proto=17)
+
+            new_pkt = eth / outer_ip / udp_int / Raw(int_payload)
+
+        # ----------------
+        # Case 2: not UDP originally → insert new UDP
+        # ----------------
+        else:
+            original_proto = pkt[IP].proto
+            shim = build_int_shim(hop_ml, num_hops, npt=2, orig_ip_proto=original_proto)
+            # original L4 bytes (transport header + payload)
+            orig_transport_and_payload = bytes(pkt[IP].payload)
+
+            # final raw payload for INT
+            int_payload = shim + md_header + metadata_stack + orig_transport_and_payload
+
+            # Fresh outer IP (proto=17)
+            outer_ip = IP(src=pkt[IP].src, dst=pkt[IP].dst, ttl=pkt[IP].ttl, proto=17)
+
+            # Outer UDP
+            if pkt.haslayer(UDP):
+                src_port = pkt[UDP].sport
+            elif pkt.haslayer(TCP):
+                src_port = pkt[TCP].sport
+            else:
+                src_port = rng.randint(1024, 65535)
+            udp_int = UDP(sport=src_port, dport=int_udp_dst_port)
+
+            # Compose
+            new_pkt = eth / outer_ip / udp_int / Raw(int_payload)
 
         # Force recompute: serialize and reparse
         try:
