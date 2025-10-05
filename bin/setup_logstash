@@ -8,16 +8,16 @@ ES_PASS="${ES_PASS:-diciembre}"
 SRC_ES_CA_CERT="${SRC_ES_CA_CERT:-/etc/elasticsearch/certs/http_ca.crt}"
 ES_CA_CERT="${ES_CA_CERT:-/etc/logstash/certs/http_ca.crt}"
 
-PIPELINE_ID="${PIPELINE_ID:-int-hops-and-logs}"
+PIPELINE_ID="${PIPELINE_ID:-int-metrics-and-logs}"
 PORT_BEATS="${PORT_BEATS:-5044}"
-HOPS_INDEX_PATTERN="${HOPS_INDEX_PATTERN:-int-hops-%{+YYYY.MM.dd}}"
+HOPS_INDEX_PATTERN="${HOPS_INDEX_PATTERN:-int-metrics-%{+YYYY.MM.dd}}"
 NFP_INDEX_PATTERN="${NFP_INDEX_PATTERN:-nfp-logs-%{+YYYY.MM.dd}}"
 PIPELINE_WORKERS="${PIPELINE_WORKERS:-4}"
 PQ_BYTES="${PQ_BYTES:-4gb}"
 
 PIPELINES_FILE="$LOGSTASH_ETC/pipelines.yml"
 CONF_DIR="$LOGSTASH_ETC/conf.d"
-CONF_FILE="$CONF_DIR/30-int-hops.conf"
+CONF_FILE="$CONF_DIR/30-int-metrics.conf"
 LOGSTASH_YML="$LOGSTASH_ETC/logstash.yml"
 LS_BIN="/usr/share/logstash/bin/logstash"
 
@@ -123,7 +123,7 @@ output {
       ssl_certificate_authorities => ["${ES_CA_CERT}"]
       index                       => "${HOPS_INDEX_PATTERN}"
       # Tip: if you want separate indices per series, use:
-      # index => "int-hops-%{[int][series]}-%{+YYYY.MM.dd}"
+      # index => "int-metrics-%{[int][series]}-%{+YYYY.MM.dd}"
     }
   } else if [event][dataset] == "nfp.logs" {
     elasticsearch {
