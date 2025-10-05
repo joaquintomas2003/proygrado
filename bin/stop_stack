@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Default stop order (reverse of startup): Beats -> Kibana -> Logstash -> Elasticsearch
+DEFAULT_UNITS_STOP_ORDER=(filebeat kibana logstash elasticsearch)
+
+SUDO="sudo"
+[[ $EUID -eq 0 ]] && SUDO=""
+
+TIMEOUT=45
+FORCE=0
+CLEAR_LS_QUEUE=0
+REMOTE_HOST=""
+LS_QUEUE_DIR="${LS_QUEUE_DIR:-/var/lib/logstash/queue}"
+LS_PIPELINE_ID="${LS_PIPELINE_ID:-int-hops-and-logs}"  # adjust if you use another pipeline id
+UNITS_STOP_ORDER=("${DEFAULT_UNITS_STOP_ORDER[@]}")
+
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") [options]
+
+Options:
+  --timeout SECS             Max seconds to wait for each unit to stop (default: ${TIMEOUT})
+  --force                    If a unit doesn't stop in time, send SIGKILL via 'systemctl kill'
+  --clear-logstash-queue     After Logstash is stopped, clear its PQ dir to remove stale .lock (DATA LOSS!)
+  --host HOST                Run all actions over SSH on HOST (uses 'ssh HOST ...')
+  --units "a b c ..."        Override stop order / unit names (space-separated)
+  --help                     Show this help
+
+Notes:
+- Stop order default: filebeat -> kibana -> logstash -> elasticsearch.
+- Use --clear-logstash-queue only if you're stuck on a stale queue lock and you accept losing queued events.
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --timeout) TIMEOUT="${2:-}"; shift ;;
+    --force) FORCE=1 ;;
+    --clear-logstash-queue) CLEAR_LS_QUEUE=1 ;;
+    --host) REMOTE_HOST="${2:-}"; shift ;;
+    --units) IFS=' ' read -r -a UNITS_STOP_ORDER <<< "${2:-}"; shift ;;
+    --help|-h) usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage; exit 2 ;;
+  case_end: ) ;;
+  esac
+  shift
+done
+
+run() {
+  if [[ -n "$REMOTE_HOST" ]]; then
+    ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$REMOTE_HOST" "$@"
+  else
+    bash -c "$*"
+  fi
+}
+
+jrun() {
+  # journalctl helper (no error if journal empty)
+  if [[ -n "$REMOTE_HOST" ]]; then
+    ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$REMOTE_HOST" "journalctl -u \"$1\" -n 100 --no-pager || true"
+  else
+    $SUDO journalctl -u "$1" -n 100 --no-pager || true
+  fi
+}
+
+stop_unit() {
+  local u="$1" t="$2"
+  echo "→ stopping ${u}…"
+
+  # Try a best-effort stop regardless of existence; suppress errors
+  run "$SUDO systemctl stop \"$u\" >/dev/null 2>&1 || true"
+
+  # Wait until inactive or unknown/not-found
+  for (( i=0; i< t; i++ )); do
+    # is-active prints: active | inactive | failed | activating | deactivating | unknown
+    state="$(run "$SUDO systemctl is-active \"$u\" 2>/dev/null || true")"
+    case "$state" in
+      inactive|failed|unknown|"") echo "  ✓ stopped ($state)"; return 0 ;;
+    esac
+    sleep 1
+  done
+
+  # If still active, optionally force-kill
+  state="$(run "$SUDO systemctl is-active \"$u\" 2>/dev/null || true")"
+  if [[ "$state" != "active" ]]; then
+    echo "  ✓ stopped ($state)"
+    return 0
+  fi
+
+  echo "  ! still running after ${t}s"
+  if [[ "$FORCE" -eq 1 ]]; then
+    echo "  ⚠ forcing ${u} down (SIGKILL)…"
+    run "$SUDO systemctl kill -s SIGKILL \"$u\" || true"
+    sleep 1
+    state="$(run "$SUDO systemctl is-active \"$u\" 2>/dev/null || true")"
+    if [[ "$state" == "active" ]]; then
+      echo "  ✗ could not force-stop ${u}; recent logs:" >&2
+      jrun "$u"
+      return 1
+    else
+      echo "  ✓ force-stopped ($state)"
+      return 0
+    fi
+  else
+    echo "  ✗ not stopped; use --force to kill. Recent logs:" >&2
+    jrun "$u"
+    return 1
+  fi
+}
+
+overall_ok=0
+for u in "${UNITS_STOP_ORDER[@]}"; do
+  if ! stop_unit "$u" "$TIMEOUT"; then
+    overall_ok=1
+  fi
+done
+
+# Optionally clear Logstash PQ (dangerous; removes queued events)
+if [[ "$CLEAR_LS_QUEUE" -eq 1 ]]; then
+  # Ensure logstash is not active
+  ls_state="$(run "$SUDO systemctl is-active logstash 2>/dev/null || true")"
+  if [[ "$ls_state" == "active" ]]; then
+    echo "⚠ logstash is still active; refusing to clear queue."
+    overall_ok=1
+  else
+    qdir="${LS_QUEUE_DIR}/${LS_PIPELINE_ID}"
+    if run "$SUDO test -d \"$qdir\""; then
+      backup="/var/lib/logstash/queue.bak.$(date +%Y%m%d%H%M%S)"
+      echo "→ clearing Logstash persistent queue at $qdir (backup -> $backup)"
+      run "$SUDO mkdir -p \"$backup\""
+      run "$SUDO sh -c 'mv \"$qdir\"/* \"$backup\"/ 2>/dev/null || true'"
+      run "$SUDO rm -f \"$qdir/.lock\" || true"
+      echo "  ✓ queue cleared (lock removed)"
+    else
+      echo "• no per-pipeline queue dir at ${qdir}; nothing to clear"
+    fi
+  fi
+fi
+
+if [[ "$overall_ok" -eq 0 ]]; then
+  echo "✅ all requested services are stopped"
+else
+  echo "⚠ some services failed to stop cleanly (see logs above)"
+  exit 1
+fi
