@@ -1,4 +1,5 @@
-num_packets: 15
+# num_packets: 1000
+input_pcap: "traces/Anonymized_bras_dataset/BRAS_capture_network-transmission_1.pcap"
 output_pcap: "generated_int.pcap"
 
 int_udp_dst_port: 5000
