@@ -8,7 +8,8 @@ ES_PASS="${ES_PASS:-diciembre}"
 SRC_ES_CA_CERT="${SRC_ES_CA_CERT:-/etc/elasticsearch/certs/http_ca.crt}"
 ES_CA_CERT="${ES_CA_CERT:-/etc/logstash/certs/http_ca.crt}"
 
-PIPELINE_ID="${PIPELINE_ID:-int-metrics-and-logs}"
+# ← you asked to call the pipeline "int-metrics"
+PIPELINE_ID="${PIPELINE_ID:-int-metrics}"
 PORT_BEATS="${PORT_BEATS:-5044}"
 HOPS_INDEX_PATTERN="${HOPS_INDEX_PATTERN:-int-metrics-%{+YYYY.MM.dd}}"
 NFP_INDEX_PATTERN="${NFP_INDEX_PATTERN:-nfp-logs-%{+YYYY.MM.dd}}"
@@ -34,7 +35,6 @@ backup_if_exists () {
     sudo cp -a "$f" "$bak"
   fi
 }
-
 backup_if_exists "$PIPELINES_FILE"
 backup_if_exists "$CONF_FILE"
 backup_if_exists "$LOGSTASH_YML"
@@ -68,46 +68,54 @@ input {
 filter {
   if [event][dataset] == "int.metrics" {
     #
-    # Duplicate once so we can split 'latest' and 'average' independently.
+    # Keep both arrays in the event, and ALSO create flat arrays like:
+    #   int.hop_latency_latest, int.hop_latency_average, int.node_id_latest, ...
     #
-    if [int][average] {
-      clone { clones => ["int_average"] }
+    ruby {
+      code => '
+        def pull(arr, key)
+          return [] unless arr.is_a?(Array)
+          arr.map{|h| h.is_a?(Hash) ? h[key] : nil}.compact
+        end
+
+        latest  = event.get("[int][latest]")  || []
+        average = event.get("[int][average]") || []
+
+        event.set("[int][node_id_latest]",             pull(latest,  "node_id"))
+        event.set("[int][hop_latency_latest]",         pull(latest,  "hop_latency"))
+        event.set("[int][queue_occupancy_latest]",     pull(latest,  "queue_occupancy"))
+        event.set("[int][egress_interface_tx_latest]", pull(latest,  "egress_interface_tx"))
+
+        event.set("[int][node_id_average]",             pull(average, "node_id"))
+        event.set("[int][hop_latency_average]",         pull(average, "hop_latency"))
+        event.set("[int][queue_occupancy_average]",     pull(average, "queue_occupancy"))
+        event.set("[int][egress_interface_tx_average]", pull(average, "egress_interface_tx"))
+
+        # Convenience scalars
+        event.set("[int][hops_count_latest]",  (latest.is_a?(Array)  ? latest.size  : 0))
+        event.set("[int][hops_count_average]", (average.is_a?(Array) ? average.size : 0))
+
+        # Per-doc averages (float)
+        lats_l = event.get("[int][hop_latency_latest]")  || []
+        lats_a = event.get("[int][hop_latency_average]") || []
+        if lats_l.any?
+          sum = 0.0; lats_l.each{|v| sum += v.to_f rescue nil }
+          event.set("[int][hop_latency_avg_latest]",  sum / lats_l.length)
+        end
+        if lats_a.any?
+          sum = 0.0; lats_a.each{|v| sum += v.to_f rescue nil }
+          event.set("[int][hop_latency_avg_average]", sum / lats_a.length)
+        end
+      '
     }
 
-    #
-    # Branch for AVERAGE series
-    #
-    if [type] == "int_average" {
-      if [int][average] {
-        split { field => "[int][average]" }
-        mutate {
-          add_field => { "[int][series]" => "average" }
-          rename => {
-            "[int][average][node_id]"             => "[int][node_id]"
-            "[int][average][hop_latency]"         => "[int][hop_latency_us]"
-            "[int][average][queue_occupancy]"     => "[int][queue_occupancy]"
-            "[int][average][egress_interface_tx]" => "[int][egress_interface_tx]"
-          }
-          remove_field => ["[int][average]", "[int][latest]", "type"]
-        }
-      }
-    }
-    #
-    # Branch for LATEST series (original event)
-    #
-    else {
-      if [int][latest] {
-        split { field => "[int][latest]" }
-        mutate {
-          add_field => { "[int][series]" => "latest" }
-          rename => {
-            "[int][latest][node_id]"             => "[int][node_id]"
-            "[int][latest][hop_latency]"         => "[int][hop_latency_us]"
-            "[int][latest][queue_occupancy]"     => "[int][queue_occupancy]"
-            "[int][latest][egress_interface_tx]" => "[int][egress_interface_tx]"
-          }
-          remove_field => ["[int][latest]", "[int][average]"]
-        }
+    # (Optional) Sanity: ensure numeric types where possible
+    mutate {
+      convert => {
+        "[int][hops_count_latest]"           => "integer"
+        "[int][hops_count_average]"          => "integer"
+        "[int][hop_latency_avg_latest]"      => "float"
+        "[int][hop_latency_avg_average]"     => "float"
       }
     }
   }
@@ -122,8 +130,6 @@ output {
       ssl_enabled                 => true
       ssl_certificate_authorities => ["${ES_CA_CERT}"]
       index                       => "${HOPS_INDEX_PATTERN}"
-      # Tip: if you want separate indices per series, use:
-      # index => "int-metrics-%{[int][series]}-%{+YYYY.MM.dd}"
     }
   } else if [event][dataset] == "nfp.logs" {
     elasticsearch {
