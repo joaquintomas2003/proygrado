@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Units to manage (change if your names differ)
-UNITS=(elasticsearch kibana filebeat)
+# Units to manage (order matters!)
+# Start/Restart in dependency order: ES -> Logstash -> Kibana -> Filebeat
+UNITS=(elasticsearch logstash kibana filebeat)
 
 SUDO="sudo"
 [[ $EUID -eq 0 ]] && SUDO=""

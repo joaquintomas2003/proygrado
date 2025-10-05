@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+LOGSTASH_ETC="${LOGSTASH_ETC:-/etc/logstash}"
+ES_HOSTS_JSON="${ES_HOSTS_JSON:-[\"https://localhost:9200\"]}"
+ES_USER="${ES_USER:-elastic}"
+ES_PASS="${ES_PASS:-diciembre}"
+SRC_ES_CA_CERT="${SRC_ES_CA_CERT:-/etc/elasticsearch/certs/http_ca.crt}"
+ES_CA_CERT="${ES_CA_CERT:-/etc/logstash/certs/http_ca.crt}"
+
+# ← you asked to call the pipeline "int-metrics"
+PIPELINE_ID="${PIPELINE_ID:-int-metrics}"
+PORT_BEATS="${PORT_BEATS:-5044}"
+HOPS_INDEX_PATTERN="${HOPS_INDEX_PATTERN:-int-metrics-%{+YYYY.MM.dd}}"
+NFP_INDEX_PATTERN="${NFP_INDEX_PATTERN:-nfp-logs-%{+YYYY.MM.dd}}"
+PIPELINE_WORKERS="${PIPELINE_WORKERS:-4}"
+PQ_BYTES="${PQ_BYTES:-4gb}"
+
+PIPELINES_FILE="$LOGSTASH_ETC/pipelines.yml"
+CONF_DIR="$LOGSTASH_ETC/conf.d"
+CONF_FILE="$CONF_DIR/30-int-metrics.conf"
+LOGSTASH_YML="$LOGSTASH_ETC/logstash.yml"
+LS_BIN="/usr/share/logstash/bin/logstash"
+
+ts() { date +%Y%m%d%H%M%S; }
+
+echo "→ Ensuring Logstash config directories exist..."
+sudo mkdir -p "$CONF_DIR" /etc/logstash/certs
+
+backup_if_exists () {
+  local f="$1"
+  if sudo test -f "$f"; then
+    local bak="${f}.bak.$(ts)"
+    echo "→ Backing up $f to $bak"
+    sudo cp -a "$f" "$bak"
+  fi
+}
+backup_if_exists "$PIPELINES_FILE"
+backup_if_exists "$CONF_FILE"
+backup_if_exists "$LOGSTASH_YML"
+
+# --- Ensure CA cert is present for Logstash ---
+if ! sudo test -r "$ES_CA_CERT"; then
+  echo "→ Installing CA cert for Logstash..."
+  if ! sudo test -r "$SRC_ES_CA_CERT"; then
+    echo "✗ Source CA not readable: $SRC_ES_CA_CERT" >&2
+    exit 1
+  fi
+  sudo install -m 0644 "$SRC_ES_CA_CERT" "$ES_CA_CERT"
+fi
+sudo chmod 0644 "$ES_CA_CERT"
+sudo chmod 0755 /etc/logstash /etc/logstash/certs
+
+echo "→ Writing pipelines.yml (overwriting)..."
+sudo tee "$PIPELINES_FILE" >/dev/null <<YML
+- pipeline.id: ${PIPELINE_ID}
+  path.config: "${CONF_DIR}/*.conf"
+  pipeline.workers: ${PIPELINE_WORKERS}
+  queue.type: persisted
+YML
+
+echo "→ Writing ${CONF_FILE} (overwriting)..."
+sudo tee "$CONF_FILE" >/dev/null <<CONF
+input {
+  beats { port => ${PORT_BEATS} }
+}
+
+filter {
+  if [event][dataset] == "int.metrics" {
+    ruby {
+      code => '
+        def pull(arr, key)
+          return [] unless arr.is_a?(Array)
+          arr.map { |h| h.is_a?(Hash) ? h[key] : nil }.compact
+        end
+
+        latest  = event.get("[int][latest]")  || []
+        average = event.get("[int][average]") || []
+
+        # Latest → flat arrays
+        event.set("latest_node_id",             pull(latest,  "node_id"))
+        event.set("latest_hop_latency",         pull(latest,  "hop_latency"))
+        event.set("latest_queue_occupancy",     pull(latest,  "queue_occupancy"))
+        event.set("latest_egress_interface_tx", pull(latest,  "egress_interface_tx"))
+
+        # Average → flat arrays
+        event.set("average_node_id",             pull(average, "node_id"))
+        event.set("average_hop_latency",         pull(average, "hop_latency"))
+        event.set("average_queue_occupancy",     pull(average, "queue_occupancy"))
+        event.set("average_egress_interface_tx", pull(average, "egress_interface_tx"))
+
+        # Optional: counts for quick QA / visualizations
+        event.set("latest_hops_count",  (latest.is_a?(Array)  ? latest.size  : 0))
+        event.set("average_hops_count", (average.is_a?(Array) ? average.size : 0))
+      '
+    }
+
+    # We intentionally do NOT convert to "integer" to avoid 32-bit overflow.
+    # Elasticsearch will store them as numeric (long) from JSON.
+
+    # Drop the bulky originals now that we flattened them:
+    mutate {
+      remove_field => ["[int][latest]", "[int][average]"]
+    }
+  }
+}
+
+output {
+  if [event][dataset] == "int.metrics" {
+    elasticsearch {
+      hosts                       => ${ES_HOSTS_JSON}
+      user                        => "${ES_USER}"
+      password                    => "${ES_PASS}"
+      ssl_enabled                 => true
+      ssl_certificate_authorities => ["${ES_CA_CERT}"]
+      index                       => "${HOPS_INDEX_PATTERN}"
+    }
+  } else if [event][dataset] == "nfp.logs" {
+    elasticsearch {
+      hosts                       => ${ES_HOSTS_JSON}
+      user                        => "${ES_USER}"
+      password                    => "${ES_PASS}"
+      ssl_enabled                 => true
+      ssl_certificate_authorities => ["${ES_CA_CERT}"]
+      index                       => "${NFP_INDEX_PATTERN}"
+    }
+  }
+}
+CONF
+
+echo "→ Enabling persistent queues in logstash.yml (idempotent)..."
+if sudo grep -qE '^\s*queue\.type:' "$LOGSTASH_YML"; then
+  sudo sed -i 's/^\s*queue\.type:.*/queue.type: persisted/' "$LOGSTASH_YML"
+else
+  echo "queue.type: persisted" | sudo tee -a "$LOGSTASH_YML" >/dev/null
+fi
+
+if sudo grep -qE '^\s*queue\.max_bytes:' "$LOGSTASH_YML"; then
+  sudo sed -i "s/^\s*queue\.max_bytes:.*/queue.max_bytes: ${PQ_BYTES}/" "$LOGSTASH_YML"
+else
+  echo "queue.max_bytes: ${PQ_BYTES}" | sudo tee -a "$LOGSTASH_YML" >/dev/null
+fi
+
+echo "→ Validating Logstash configuration..."
+sudo -u logstash "$LS_BIN" --path.settings "$LOGSTASH_ETC" --config.test_and_exit
+
+echo "→ Restarting Logstash..."
+sudo systemctl restart logstash
+
+echo "→ Tail Logstash logs (Ctrl-C to exit):"
+sudo journalctl -u logstash -f
