@@ -19,8 +19,7 @@ Este proyecto incluye dos scripts para manejar la infraestructura de monitoreo:
 Para visualizar Elasticsearch/Kibana, es necesario conectarse al host con un túnel SSH:
 
 ```bash
-ssh -L 5601:localhost:5601 nombre.apellido@lulu.fing.edu.uy
-ssh -L 5601:localhost:5601 host@ip
+ssh -J nombre.apellido@lulu.fing.edu.uy -L 5601:localhost:5601 host@ip
 ```
 
 Luego, abrir en el navegador el siguiente enlace:
