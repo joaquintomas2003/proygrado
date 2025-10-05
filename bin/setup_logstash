@@ -67,56 +67,40 @@ input {
 
 filter {
   if [event][dataset] == "int.metrics" {
-    #
-    # Keep both arrays in the event, and ALSO create flat arrays like:
-    #   int.hop_latency_latest, int.hop_latency_average, int.node_id_latest, ...
-    #
     ruby {
       code => '
         def pull(arr, key)
           return [] unless arr.is_a?(Array)
-          arr.map{|h| h.is_a?(Hash) ? h[key] : nil}.compact
+          arr.map { |h| h.is_a?(Hash) ? h[key] : nil }.compact
         end
 
         latest  = event.get("[int][latest]")  || []
         average = event.get("[int][average]") || []
 
-        event.set("[int][node_id_latest]",             pull(latest,  "node_id"))
-        event.set("[int][hop_latency_latest]",         pull(latest,  "hop_latency"))
-        event.set("[int][queue_occupancy_latest]",     pull(latest,  "queue_occupancy"))
-        event.set("[int][egress_interface_tx_latest]", pull(latest,  "egress_interface_tx"))
+        # Latest → flat arrays
+        event.set("latest_node_id",             pull(latest,  "node_id"))
+        event.set("latest_hop_latency",         pull(latest,  "hop_latency"))
+        event.set("latest_queue_occupancy",     pull(latest,  "queue_occupancy"))
+        event.set("latest_egress_interface_tx", pull(latest,  "egress_interface_tx"))
 
-        event.set("[int][node_id_average]",             pull(average, "node_id"))
-        event.set("[int][hop_latency_average]",         pull(average, "hop_latency"))
-        event.set("[int][queue_occupancy_average]",     pull(average, "queue_occupancy"))
-        event.set("[int][egress_interface_tx_average]", pull(average, "egress_interface_tx"))
+        # Average → flat arrays
+        event.set("average_node_id",             pull(average, "node_id"))
+        event.set("average_hop_latency",         pull(average, "hop_latency"))
+        event.set("average_queue_occupancy",     pull(average, "queue_occupancy"))
+        event.set("average_egress_interface_tx", pull(average, "egress_interface_tx"))
 
-        # Convenience scalars
-        event.set("[int][hops_count_latest]",  (latest.is_a?(Array)  ? latest.size  : 0))
-        event.set("[int][hops_count_average]", (average.is_a?(Array) ? average.size : 0))
-
-        # Per-doc averages (float)
-        lats_l = event.get("[int][hop_latency_latest]")  || []
-        lats_a = event.get("[int][hop_latency_average]") || []
-        if lats_l.any?
-          sum = 0.0; lats_l.each{|v| sum += v.to_f rescue nil }
-          event.set("[int][hop_latency_avg_latest]",  sum / lats_l.length)
-        end
-        if lats_a.any?
-          sum = 0.0; lats_a.each{|v| sum += v.to_f rescue nil }
-          event.set("[int][hop_latency_avg_average]", sum / lats_a.length)
-        end
+        # Optional: counts for quick QA / visualizations
+        event.set("latest_hops_count",  (latest.is_a?(Array)  ? latest.size  : 0))
+        event.set("average_hops_count", (average.is_a?(Array) ? average.size : 0))
       '
     }
 
-    # (Optional) Sanity: ensure numeric types where possible
+    # We intentionally do NOT convert to "integer" to avoid 32-bit overflow.
+    # Elasticsearch will store them as numeric (long) from JSON.
+
+    # Drop the bulky originals now that we flattened them:
     mutate {
-      convert => {
-        "[int][hops_count_latest]"           => "integer"
-        "[int][hops_count_average]"          => "integer"
-        "[int][hop_latency_avg_latest]"      => "float"
-        "[int][hop_latency_avg_average]"     => "float"
-      }
+      remove_field => ["[int][latest]", "[int][average]"]
     }
   }
 }
