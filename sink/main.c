@@ -7,6 +7,7 @@
 static __inline int _get_hash_key(EXTRACTED_HEADERS_T *headers, uint32_t hash_key[4]) {
   uint32_t src_port;
   uint32_t dst_port;
+  uint32_t proto;
 
   PIF_PLUGIN_ipv4_T *ipv4 = pif_plugin_hdr_get_ipv4(headers);
   PIF_PLUGIN_udp_T *udp = pif_plugin_hdr_get_udp(headers);
@@ -19,9 +20,11 @@ static __inline int _get_hash_key(EXTRACTED_HEADERS_T *headers, uint32_t hash_ke
 
     src_port = udp->src_port;
     dst_port = (first_word << 8) | second_word;
+    proto = ipv4->protocol;
   } else if (int_shim->npt == 2 && int_shim->reserved == IP_PROTO_TCP){
     src_port = tcp->src_port;
     dst_port = tcp->dst_port;
+    proto = int_shim->reserved;
   } else {
     return -1;
   }
@@ -29,7 +32,7 @@ static __inline int _get_hash_key(EXTRACTED_HEADERS_T *headers, uint32_t hash_ke
   hash_key[0] = ipv4->src_addr;
   hash_key[1] = ipv4->dst_addr;
   hash_key[2] = (src_port << 16) | dst_port;
-  hash_key[3] = ipv4->protocol;
+  hash_key[3] = proto;
 
   return 0;
 }
