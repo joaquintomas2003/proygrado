@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 #define FLOWCACHE_ROWS (1 << 24)
-#define BUCKET_SIZE 1
+#define BUCKET_SIZE 12
 #define MAX_INT_NODES 5
 #define NUM_RINGS 8
 #define RING_SIZE (1 << 16)
