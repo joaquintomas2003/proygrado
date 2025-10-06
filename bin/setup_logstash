@@ -69,6 +69,7 @@ filter {
   if [event][dataset] == "int.metrics" {
     ruby {
       code => '
+        # --- Flatten INT metric arrays ---
         def pull(arr, key)
           return [] unless arr.is_a?(Array)
           arr.map { |h| h.is_a?(Hash) ? h[key] : nil }.compact
@@ -92,6 +93,24 @@ filter {
         # Optional: counts for quick QA / visualizations
         event.set("latest_hops_count",  (latest.is_a?(Array)  ? latest.size  : 0))
         event.set("average_hops_count", (average.is_a?(Array) ? average.size : 0))
+
+        # --- Convert flow keys to dotted IP ---
+        keys = event.get("[flow][key]")
+        if keys && keys.length >= 4
+          def u32_to_ip(v)
+            v = v.to_i & 0xFFFFFFFF
+            "#{(v >> 24) & 0xFF}.#{(v >> 16) & 0xFF}.#{(v >> 8) & 0xFF}.#{v & 0xFF}"
+          end
+          event.set("[flow][ip_src]", u32_to_ip(keys[0]))
+          event.set("[flow][ip_dst]", u32_to_ip(keys[1]))
+
+          src_port = (keys[2] >> 16) & 0xFFFF
+          dst_port = keys[2] & 0xFFFF
+          event.set("[flow][src_port]", src_port)
+          event.set("[flow][dst_port]", dst_port)
+
+          event.set("[flow][proto]", keys[3])
+        end
       '
     }
 
