@@ -9,7 +9,7 @@
 // Each document includes:
 //   - @timestamp               : host wall-clock (ISO8601, UTC)
 //   - host.name                : hostname
-//   - flow.id / flow.key[]     : 4x u32 key (hex id + numeric array)
+//   - flow.key[]               : 4x u32 key (numeric array)
 //   - flow.packet_count        : packet_count
 //   - flow.last_update_ts      : NIC raw timestamp (ns)
 //   - int.node_count           : # INT nodes
@@ -194,7 +194,6 @@ static void write_doc_ndjson(FILE *fp, const bucket_entry *e,
           "\"@timestamp\":\"%s\","
           "\"host\":{\"name\":\"%s\"},"
           "\"flow\":{"
-            "\"id\":\"%08x-%08x-%08x-%08x\","
             "\"key\":[%u,%u,%u,%u],"
             "\"packet_count\":%u,"
             "\"last_update_ts\":%llu"
@@ -203,7 +202,6 @@ static void write_doc_ndjson(FILE *fp, const bucket_entry *e,
             "\"node_count\":%u,"
             "\"latest\":",
         ts_now, hostname,
-        e->key[0], e->key[1], e->key[2], e->key[3],
         e->key[0], e->key[1], e->key[2], e->key[3],
         e->packet_count,
         (unsigned long long)e->last_update_timestamp,
