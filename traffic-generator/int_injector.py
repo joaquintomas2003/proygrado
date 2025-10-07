@@ -9,6 +9,7 @@ import math
 INT_UDP_DST_PORT = 5000  # arbitrary INT UDP port
 ORIGINAL_PROTO = 6        # TCP
 INT_TYPE = 1              # 1 = INT-MD
+MAX_FRAME = 1500
 
 # Bit: (Field, Length)
 INSTRUCTION_FIELDS = {
@@ -215,10 +216,10 @@ def process_trace(cfg):
         # ----------------
         if pkt.haslayer(UDP):
             orig_dport = pkt[UDP].dport
-            orig_payload = bytes(pkt[UDP].payload)
-
             # shim stores original dport for sink restoration
             shim = build_int_shim(hop_ml, num_hops, npt=1, orig_udp_dport=orig_dport)
+            max_payload_len = MAX_FRAME - len(eth/IP()/UDP()) - len(shim + md_header + metadata_stack)
+            orig_payload = bytes(pkt[UDP].payload)[:max_payload_len]
 
             int_payload = shim + md_header + metadata_stack + orig_payload
 
@@ -235,8 +236,9 @@ def process_trace(cfg):
         else:
             original_proto = pkt[IP].proto
             shim = build_int_shim(hop_ml, num_hops, npt=2, orig_ip_proto=original_proto)
+            max_payload_len = MAX_FRAME - len(eth/IP()/UDP()) - len(shim + md_header + metadata_stack)
             # original L4 bytes (transport header + payload)
-            orig_transport_and_payload = bytes(pkt[IP].payload)
+            orig_transport_and_payload = bytes(pkt[IP].payload)[:max_payload_len]
 
             # final raw payload for INT
             int_payload = shim + md_header + metadata_stack + orig_transport_and_payload
