@@ -7,11 +7,11 @@
 // renamed to ".ndjson" on rotation/close. Filebeat tails only the closed files.
 //
 // Each document includes:
-//   - @timestamp                : host wall-clock (ISO8601, UTC)
-//   - host.name                 : hostname
+//   - @timestamp               : host wall-clock (ISO8601, UTC)
+//   - host.name                : hostname
 //   - flow.id / flow.key[]     : 4x u32 key (hex id + numeric array)
-//   - network.packets          : packet_count
-//   - int_ts_raw               : NIC raw timestamp (ns)
+//   - flow.packet_count        : packet_count
+//   - flow.last_update_ts      : NIC raw timestamp (ns)
 //   - int.node_count           : # INT nodes
 //   - int.latest[] / average[] : arrays of {node_id, hop_latency, queue_occupancy, egress_interface_tx}
 //
@@ -195,10 +195,10 @@ static void write_doc_ndjson(FILE *fp, const bucket_entry *e,
           "\"host\":{\"name\":\"%s\"},"
           "\"flow\":{"
             "\"id\":\"%08x-%08x-%08x-%08x\","
-            "\"key\":[%u,%u,%u,%u]"
+            "\"key\":[%u,%u,%u,%u],"
+            "\"packet_count\":%u,"
+            "\"last_update_ts\":%llu"
           "},"
-          "\"network\":{\"packets\":%u},"
-          "\"int_ts_raw\":%llu,"
           "\"int\":{"
             "\"node_count\":%u,"
             "\"latest\":",
