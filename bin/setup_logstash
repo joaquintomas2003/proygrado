@@ -69,26 +69,41 @@ filter {
   if [event][dataset] == "int.metrics" {
     ruby {
       code => '
+        latest  = event.get("[int][latest]")  || []
+        average = event.get("[int][average]") || []
+
+        # Decode queue_occupancy into objects
+        latest.each do |h|
+          next unless h.is_a?(Hash) && h["queue_occupancy"]
+          val = h["queue_occupancy"].to_i
+          h["queue"] = { "id" => (val >> 24) & 0xFF, "occupancy" => val & 0xFFFFFF }
+        end
+
+        average.each do |h|
+          next unless h.is_a?(Hash) && h["queue_occupancy"]
+          val = h["queue_occupancy"].to_i
+          h["queue"] = { "id" => (val >> 24) & 0xFF, "occupancy" => val & 0xFFFFFF }
+        end
+
         # --- Flatten INT metric arrays ---
         def pull(arr, key)
           return [] unless arr.is_a?(Array)
           arr.map { |h| h.is_a?(Hash) ? h[key] : nil }.compact
         end
 
-        latest  = event.get("[int][latest]")  || []
-        average = event.get("[int][average]") || []
-
         # Latest → flat arrays
         event.set("latest_node_id",             pull(latest,  "node_id"))
         event.set("latest_hop_latency",         pull(latest,  "hop_latency"))
-        event.set("latest_queue_occupancy",     pull(latest,  "queue_occupancy"))
         event.set("latest_egress_interface_tx", pull(latest,  "egress_interface_tx"))
 
         # Average → flat arrays
         event.set("average_node_id",             pull(average, "node_id"))
         event.set("average_hop_latency",         pull(average, "hop_latency"))
-        event.set("average_queue_occupancy",     pull(average, "queue_occupancy"))
         event.set("average_egress_interface_tx", pull(average, "egress_interface_tx"))
+
+        # Keep the queues as objects
+        event.set("latest_queue_occupancy", latest.map { |h| h["queue"] })
+        event.set("average_queue_occupancy", average.map { |h| h["queue"] })
 
         # Optional: counts for quick QA / visualizations
         event.set("latest_hops_count",  (latest.is_a?(Array)  ? latest.size  : 0))
