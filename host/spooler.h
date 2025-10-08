@@ -6,12 +6,11 @@
 /**
  * The spooler is responsible for:
  *  - Draining bucket_entry items from a bounded queue.
- *  - Writing them as plain NDJSON in Elasticsearch Bulk format
- *    (action line + document line).
+ *  - Writing them as plain NDJSON (one document per line).
  *  - Rotating files when they reach a max size, doc count,
- *    or age threshold.
- *  - Renaming files from .open → .ready for durability and
- *    safe handoff to Filebeat/Logstash.
+ *    or age threshold (age checked even when idle).
+ *  - Renaming files from .ndjson.open → .ndjson for durability and
+ *    safe handoff to Filebeat/Logstash (empty segments are unlinked).
  */
 
 #define QUEUE_CAPACITY (1u << 20) /* ~1M entries */
