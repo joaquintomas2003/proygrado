@@ -92,6 +92,7 @@ typedef struct ring_meta {
   uint32_t write_pointer;
   uint32_t read_pointer;
   uint32_t full;
+  uint32_t _padding;
 } ring_meta;
 
 __export __emem uint32_t THR_T_SWITCH[3] = {0, 0, 0};
