@@ -109,9 +109,9 @@ int main(int argc, char *argv[]) {
         if (!area_ring_metas_G[i]) { fprintf(stderr, "Error: CPP area for ring meta G %d\n", i+1); ret = 1; goto exit_cleanup_areas; }
 
         /* I ring metas */
-        uint64_t off_meta_i = rtsym_ring_I->addr + ((uint64_t)i * sizeof(event_ring_list));
+        uint64_t off_meta_i = rtsym_ring_I->addr + ((uint64_t)i * sizeof(ring_meta));
         uint32_t cpp_meta_i = NFP_CPP_ISLAND_ID(rtsym_ring_I->target, NFP_CPP_ACTION_RW, 0, rtsym_ring_I->domain);
-        area_ring_metas_I[i]= nfp_cpp_area_alloc_acquire(h_cpp, cpp_meta_i, off_meta_i, sizeof(event_ring_list));
+        area_ring_metas_I[i]= nfp_cpp_area_alloc_acquire(h_cpp, cpp_meta_i, off_meta_i, sizeof(ring_meta));
         if (!area_ring_metas_I[i]) { fprintf(stderr, "Error: CPP area for ring meta I %d\n", i+1); ret = 1; goto exit_cleanup_areas; }
     }
 
@@ -150,7 +150,7 @@ int main(int argc, char *argv[]) {
             uint32_t rp = current_ring_meta.read_pointer;
             uint32_t full = current_ring_meta.full;
 
-            if (debug && wp != 0 && rp != 0 && full != 0) {
+            if (debug) {
                 printf("Ring %d - WP: %u, RP: %u, Full: %u\n", i + 1, wp, rp, full);
             }
 
@@ -183,14 +183,15 @@ int main(int argc, char *argv[]) {
                 }
 
                 rp = (rp + 1) & (RING_SIZE - 1);
-                if (debug) usleep(1000); /* 1ms pacing in debug */
+                if (debug) usleep(200000);
             }
 
             /* Advance read pointer if we consumed anything */
             if (j > 0) {
                 if (full) full = 0;
-                current_ring_meta.read_pointer = rp;
-                current_ring_meta.full = full;
+                current_ring_meta.write_pointer = wp;
+                current_ring_meta.read_pointer  = rp;
+                current_ring_meta.full          = full;
                 if (nfp_cpp_area_write(area_ring_metas_G[i], 0, &current_ring_meta, sizeof(ring_meta)) < 0) {
                     fprintf(stderr, "Error: Failed to write updated ring meta for ring %d (%s)\n", i + 1, strerror(errno));
                     ret = 1;
@@ -201,7 +202,7 @@ int main(int argc, char *argv[]) {
             if (debug && j != 0) printf("  Processed %d entries from ring %d in iteration %llu\n\n", j, i + 1, loop_iteration);
         }
 
-        if (debug) usleep(3000);
+        if (debug) usleep(200000);
         loop_iteration++;
     }
     /*****************************************************************/
