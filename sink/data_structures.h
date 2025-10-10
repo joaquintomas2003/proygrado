@@ -64,11 +64,9 @@ typedef struct int_metric_info {
 typedef struct bucket_entry {
   uint32_t key[4]; /* ipv4.src_addr, ipv4.dst_addr, (src_port << 16) | dst_port, ipv4.protocol */
   uint32_t packet_count;
-  uint32_t _padding1;
   uint64_t first_packet_timestamp; /* Timestamp in nanoseconds */
   uint64_t last_update_timestamp; /* Timestamp in nanoseconds */
   int_metric_info int_metric_info_value;
-  uint32_t _padding2;
 } bucket_entry;
 
 typedef struct bucket_list {
