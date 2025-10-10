@@ -126,10 +126,6 @@ filter {
 
           event.set("[flow][proto]", keys[3])
         end
-
-        # --- Convert int_ts_raw to string to avoid Elasticsearch long overflow ---
-        raw_ts = event.get("int_ts_raw")
-        event.set("int_ts_raw", raw_ts.to_s) if raw_ts
       '
     }
 

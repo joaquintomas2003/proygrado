@@ -118,6 +118,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   __xrw    ring_meta ring_meta_read;
   __xwrite uint32_t key_lru[4];
   __xwrite uint32_t packet_count_lru;
+  __xwrite uint64_t first_packet_timestamp_lru;
 
   __xrw int_metric_sample prev_latest;
   uint32_t e2e_prev_hop = 0, e2e_curr_hop = 0;
@@ -192,9 +193,11 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
         key_lru[2] = victim_entry->key[2];
         key_lru[3] = victim_entry->key[3];
         packet_count_lru = victim_entry->packet_count;
+        first_packet_timestamp_lru = victim_entry->first_packet_timestamp;
 
         mem_write_atomic(key_lru, &ring_entry->key, sizeof(key_lru));
         mem_write_atomic(&packet_count_lru, &ring_entry->packet_count, sizeof(packet_count_lru));
+        mem_write_atomic(&first_packet_timestamp_lru, &ring_entry->first_packet_timestamp, sizeof(first_packet_timestamp_lru));
         mem_write_atomic(&timestamp, &ring_entry->last_update_timestamp, sizeof(timestamp));
         mem_write_atomic(&nodes_present, &ring_entry->int_metric_info_value.node_count, sizeof(nodes_present));
 
@@ -252,6 +255,9 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
     __xwrite uint32_t key_wr[4] = {hash_key[0], hash_key[1], hash_key[2], hash_key[3]};
     mem_write_atomic(key_wr, entry->key, sizeof(key_wr));
     mem_write_atomic(&nodes_present, &entry->int_metric_info_value.node_count, sizeof(nodes_present));
+
+    // Set the first packet timestamp
+    mem_write_atomic(&update_timestamp, &entry->first_packet_timestamp, sizeof(update_timestamp));
   }
 
   /* Build the previous end-to-end hop sum before we overwrite latest[] */

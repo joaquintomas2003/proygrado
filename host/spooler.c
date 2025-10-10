@@ -11,6 +11,7 @@
 //   - host.name                : hostname
 //   - flow.key[]               : 4x u32 key (numeric array)
 //   - flow.packet_count        : packet_count
+//   - flow.first_packet_ts     : NIC raw timestamp (ns)
 //   - flow.last_update_ts      : NIC raw timestamp (ns)
 //   - int.node_count           : # INT nodes
 //   - int.latest[] / average[] : arrays of {node_id, hop_latency, queue_occupancy, egress_interface_tx}
@@ -219,6 +220,7 @@ static void write_doc_ndjson(FILE *fp, const bucket_entry *e,
           "\"flow\":{"
             "\"key\":[%u,%u,%u,%u],"
             "\"packet_count\":%u,"
+            "\"first_packet_ts\":%llu,"
             "\"last_update_ts\":%llu"
           "},"
           "\"int\":{"
@@ -227,6 +229,7 @@ static void write_doc_ndjson(FILE *fp, const bucket_entry *e,
         ts_now, hostname,
         e->key[0], e->key[1], e->key[2], e->key[3],
         e->packet_count,
+        (unsigned long long)e->first_packet_timestamp,
         (unsigned long long)e->last_update_timestamp,
         n
     );
