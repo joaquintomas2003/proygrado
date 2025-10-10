@@ -58,6 +58,13 @@ void evict_stale_entries(uint64_t threshold_ns) {
                       mem_write_atomic(&pkt_cnt_buf, (__mem void *)&r_entry->packet_count, sizeof(pkt_cnt_buf));
                     }
 
+                    // Copy first_packet_timestamp
+                    {
+                      __xrw uint64_t ts_buf;
+                      ts_buf = entry->first_packet_timestamp;
+                      mem_write_atomic(&ts_buf, (__mem void *)&r_entry->first_packet_timestamp, sizeof(ts_buf));
+                    }
+
                     // Copy last_update_timestamp
                     {
                       __xrw uint64_t ts_buf;
