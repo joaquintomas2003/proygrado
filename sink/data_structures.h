@@ -66,6 +66,7 @@ typedef struct bucket_entry {
   uint32_t packet_count;
   uint64_t first_packet_timestamp; /* Timestamp in nanoseconds */
   uint64_t last_update_timestamp; /* Timestamp in nanoseconds */
+  uint32_t _padding;
   int_metric_info int_metric_info_value;
 } bucket_entry;
 

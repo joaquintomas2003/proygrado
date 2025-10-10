@@ -30,8 +30,9 @@ typedef struct bucket_entry {
     uint32_t _padding1;
     uint64_t first_packet_timestamp;
     uint64_t last_update_timestamp;
-    int_metric_info int_metric_info_value;
     uint32_t _padding2;
+    int_metric_info int_metric_info_value;
+    uint32_t _padding3;
 } bucket_entry;
 
 typedef struct bucket_list {
