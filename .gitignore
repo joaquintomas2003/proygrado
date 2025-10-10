@@ -7,3 +7,6 @@ Makefile-nfp4build
 
 traffic-generator/traces/*
 !traffic-generator/traces/.keep
+
+host/*.o
+host/host_reader
