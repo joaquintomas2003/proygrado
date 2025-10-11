@@ -26,12 +26,11 @@ typedef struct int_metric_info {
 /* 8-byte padding is needed to match NFP's compiler default padding rules */
 typedef struct bucket_entry {
     uint32_t key[4];
-    uint32_t packet_count;
-    uint32_t _padding1;
     uint64_t first_packet_timestamp;
     uint64_t last_update_timestamp;
     int_metric_info int_metric_info_value;
-    uint32_t _padding2;
+    uint32_t packet_count;
+    uint64_t _padding;
 } bucket_entry;
 
 typedef struct bucket_list {
