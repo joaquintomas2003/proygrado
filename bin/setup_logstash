@@ -126,6 +126,15 @@ filter {
 
           event.set("[flow][proto]", keys[3])
         end
+
+        # --- Compute flow completion time ---
+        first_ts = event.get("[flow][first_packet_ts]")
+        last_ts  = event.get("[flow][last_update_ts]")
+
+        if first_ts && last_ts
+          completion_time = last_ts.to_i - first_ts.to_i
+          event.set("[flow][completion_time]", completion_time)
+        end
       '
     }
 
