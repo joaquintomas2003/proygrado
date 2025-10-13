@@ -163,6 +163,97 @@ def generate_metadata_for_hop(node_id, instruction_bitmap, params, rng=random):
 def build_metadata_stack(hops, instruction_bitmap, params, rng):
     return b"".join(generate_metadata_for_hop(h, instruction_bitmap, params, rng) for h in hops)
 
+# 16 bits ID + 1 bit flag (shift en el bit más alto del tercer byte)
+def build_app_metadata(packet_id: int, is_response: bool):
+    # 2 bytes de ID y 1 byte con el bit más significativo usado para flag
+    flag_byte = (1 << 7) if is_response else 0
+    return struct.pack("!HB", packet_id, flag_byte)
+
+def inject_int(pkt, cfg, rng, params, int_udp_dst_port):
+    # --- metadata config ---
+    hop_ids = cfg.get("hops", [1,2,3,4,5])
+    num_hops = len(hop_ids)
+    chosen_bits = cfg.get("instruction_bits", [0, 2, 3, 7])
+    instruction_bitmap = build_instruction_bitmap(chosen_bits)
+    hop_ml = compute_hop_ml(instruction_bitmap)
+
+    # Build L2: preserve MACs if present, but ensure eth.type == IPv4
+    if pkt.haslayer(Ether):
+        eth = Ether(src=pkt[Ether].src, dst=pkt[Ether].dst, type=0x0800)
+    else:
+        eth = Ether(type=0x0800)
+
+    md_header = build_int_md_header(hop_ml, rhc=0, instruction_bitmap=instruction_bitmap)
+    metadata_stack = build_metadata_stack(hop_ids, instruction_bitmap, params, rng)
+
+    # ----------------
+    # Case 1: original already has UDP
+    # ----------------
+    if pkt.haslayer(UDP):
+        orig_dport = pkt[UDP].dport
+        # shim stores original dport for sink restoration
+        shim = build_int_shim(hop_ml, num_hops, npt=1, orig_udp_dport=orig_dport)
+        max_payload_len = MAX_FRAME - len(eth/IP()/UDP()) - len(shim + md_header + metadata_stack)
+        orig_payload = bytes(pkt[UDP].payload)[:max_payload_len]
+
+        int_payload = shim + md_header + metadata_stack + orig_payload
+
+        udp_int = UDP(sport=pkt[UDP].sport, dport=int_udp_dst_port)
+        udp_int.chksum = 0  # recommended for INT UDP
+
+        outer_ip = IP(src=pkt[IP].src, dst=pkt[IP].dst, ttl=pkt[IP].ttl, proto=17)
+
+        new_pkt = eth / outer_ip / udp_int / Raw(int_payload)
+
+    # ----------------
+    # Case 2: not UDP originally → insert new UDP
+    # ----------------
+    else:
+        original_proto = pkt[IP].proto
+        shim = build_int_shim(hop_ml, num_hops, npt=2, orig_ip_proto=original_proto)
+        max_payload_len = MAX_FRAME - len(eth/IP()/UDP()) - len(shim + md_header + metadata_stack)
+        # original L4 bytes (transport header + payload)
+        orig_transport_and_payload = bytes(pkt[IP].payload)[:max_payload_len]
+
+        # final raw payload for INT
+        int_payload = shim + md_header + metadata_stack + orig_transport_and_payload
+
+        # Fresh outer IP (proto=17)
+        outer_ip = IP(src=pkt[IP].src, dst=pkt[IP].dst, ttl=pkt[IP].ttl, proto=17)
+
+        # Outer UDP
+        if pkt.haslayer(UDP):
+            src_port = pkt[UDP].sport
+        elif pkt.haslayer(TCP):
+            src_port = pkt[TCP].sport
+        else:
+            src_port = rng.randint(1024, 65535)
+        udp_int = UDP(sport=src_port, dport=int_udp_dst_port)
+
+        # Compose
+        new_pkt = eth / outer_ip / udp_int / Raw(int_payload)
+
+    # Force recompute: serialize and reparse
+    try:
+        raw = bytes(new_pkt)
+        new_pkt = Ether(raw)
+    except Exception as e:
+        # fallback: delete stale fields and try again
+        for L in [IP, UDP]:
+            if new_pkt.haslayer(L):
+                try:
+                    delattr(new_pkt[L], "len")
+                except Exception:
+                    pass
+                try:
+                    delattr(new_pkt[L], "chksum")
+                except Exception:
+                    pass
+        raw = bytes(new_pkt)
+        new_pkt = Ether(raw)
+
+    return new_pkt
+
 def process_trace(cfg):
     input_pcap = cfg["input_pcap"]
     output_pcap = cfg["output_pcap"]
@@ -189,96 +280,36 @@ def process_trace(cfg):
 
     out_packets = []
     written = 0
+    next_packet_id = 1
 
     for idx, pkt in enumerate(in_packets):
         if not pkt.haslayer(IP):
             continue
 
-        # --- metadata config ---
-        hop_ids = cfg.get("hops", [1,2,3,4,5])
-        num_hops = len(hop_ids)
-        chosen_bits = cfg.get("instruction_bits", [0, 2, 3, 7])
-        instruction_bitmap = build_instruction_bitmap(chosen_bits)
-        hop_ml = compute_hop_ml(instruction_bitmap)
+        request_pkt = pkt.copy()
+        response_pkt = pkt.copy()
 
-
-        # Build L2: preserve MACs if present, but ensure eth.type == IPv4
-        if pkt.haslayer(Ether):
-            eth = Ether(src=pkt[Ether].src, dst=pkt[Ether].dst, type=0x0800)
-        else:
-            eth = Ether(type=0x0800)
-
-        md_header = build_int_md_header(hop_ml, rhc=0, instruction_bitmap=instruction_bitmap)
-        metadata_stack = build_metadata_stack(hop_ids, instruction_bitmap, params, rng)
-
-        # ----------------
-        # Case 1: original already has UDP
-        # ----------------
+        # Invertir IPs y puertos para la response
+        response_pkt[IP].src, response_pkt[IP].dst = pkt[IP].dst, pkt[IP].src
         if pkt.haslayer(UDP):
-            orig_dport = pkt[UDP].dport
-            # shim stores original dport for sink restoration
-            shim = build_int_shim(hop_ml, num_hops, npt=1, orig_udp_dport=orig_dport)
-            max_payload_len = MAX_FRAME - len(eth/IP()/UDP()) - len(shim + md_header + metadata_stack)
-            orig_payload = bytes(pkt[UDP].payload)[:max_payload_len]
+            response_pkt[UDP].sport, response_pkt[UDP].dport = pkt[UDP].dport, pkt[UDP].sport
+        elif pkt.haslayer(TCP):
+            response_pkt[TCP].sport, response_pkt[TCP].dport = pkt[TCP].dport, pkt[TCP].sport
 
-            int_payload = shim + md_header + metadata_stack + orig_payload
-
-            udp_int = UDP(sport=pkt[UDP].sport, dport=int_udp_dst_port)
-            udp_int.chksum = 0  # recommended for INT UDP
-
-            outer_ip = IP(src=pkt[IP].src, dst=pkt[IP].dst, ttl=pkt[IP].ttl, proto=17)
-
-            new_pkt = eth / outer_ip / udp_int / Raw(int_payload)
-
-        # ----------------
-        # Case 2: not UDP originally → insert new UDP
-        # ----------------
-        else:
-            original_proto = pkt[IP].proto
-            shim = build_int_shim(hop_ml, num_hops, npt=2, orig_ip_proto=original_proto)
-            max_payload_len = MAX_FRAME - len(eth/IP()/UDP()) - len(shim + md_header + metadata_stack)
-            # original L4 bytes (transport header + payload)
-            orig_transport_and_payload = bytes(pkt[IP].payload)[:max_payload_len]
-
-            # final raw payload for INT
-            int_payload = shim + md_header + metadata_stack + orig_transport_and_payload
-
-            # Fresh outer IP (proto=17)
-            outer_ip = IP(src=pkt[IP].src, dst=pkt[IP].dst, ttl=pkt[IP].ttl, proto=17)
-
-            # Outer UDP
-            if pkt.haslayer(UDP):
-                src_port = pkt[UDP].sport
-            elif pkt.haslayer(TCP):
-                src_port = pkt[TCP].sport
+        # Agregar metadata de aplicación
+        for is_resp, base_pkt in [(False, request_pkt), (True, response_pkt)]:
+            app_md = build_app_metadata(next_packet_id, is_response=is_resp)
+            if base_pkt.haslayer(Raw):
+                base_pkt[Raw].load = app_md + bytes(base_pkt[Raw].load)
             else:
-                src_port = rng.randint(1024, 65535)
-            udp_int = UDP(sport=src_port, dport=int_udp_dst_port)
+                base_pkt = base_pkt / Raw(app_md)
+        next_packet_id += 1
 
-            # Compose
-            new_pkt = eth / outer_ip / udp_int / Raw(int_payload)
-
-        # Force recompute: serialize and reparse
-        try:
-            raw = bytes(new_pkt)
-            new_pkt = Ether(raw)
-        except Exception as e:
-            # fallback: delete stale fields and try again
-            for L in [IP, UDP]:
-                if new_pkt.haslayer(L):
-                    try:
-                        delattr(new_pkt[L], "len")
-                    except Exception:
-                        pass
-                    try:
-                        delattr(new_pkt[L], "chksum")
-                    except Exception:
-                        pass
-            raw = bytes(new_pkt)
-            new_pkt = Ether(raw)
-
-        out_packets.append(new_pkt)
-        written += 1
+        # INT a ambos
+        for app_pkt in [request_pkt, response_pkt]:
+            new_pkt = inject_int(app_pkt, cfg, rng, params, int_udp_dst_port)
+            out_packets.append(new_pkt)
+            written += 1
 
     wrpcap(output_pcap, out_packets)
     print(f"Done. Wrote {written} packets to {output_pcap}")
