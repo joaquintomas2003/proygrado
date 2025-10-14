@@ -72,6 +72,13 @@ void evict_stale_entries(uint64_t threshold_ns) {
                       mem_write_atomic(&ts_buf, (__mem void *)&r_entry->last_update_timestamp, sizeof(ts_buf));
                     }
 
+                    // Copy request_meta
+                    {
+                      __xrw uint32_t request_meta;
+                      request_meta = entry->request_meta;
+                      mem_write_atomic(&request_meta, (__mem void *)&r_entry->request_meta, sizeof(request_meta));
+                    }
+
                     // Copy int_metric_info_value.node_count
                     {
                       __xrw uint32_t node_cnt_buf;
