@@ -137,13 +137,14 @@ function int_md.dissector(buffer, pinfo, tree)
   local hop_ml_val = bit.band(metadata_byte2:uint(), 0x1F)
   local per_hop_len = hop_ml_val * 4  -- in bytes
 
-  -- total number of hops = (shim.len - metada_header_len) / hop_ml
-  -- = (shim_len_val - 3) / hop_ml_val
   local shim_len_val = shim_length_buf:uint()
-  local total_hops = (shim_len_val - 3) / hop_ml_val
 
-  local rhc_val = metadata_byte3:uint()
-  local present_hops = total_hops - rhc_val
+  local total_hops = 0
+  if hop_ml_val > 0 and shim_len_val >= 3 then
+    total_hops = math.floor((shim_len_val - 3) / hop_ml_val)
+  end
+
+  local present_hops = total_hops
 
   for hop = 1, present_hops do
     local hop_buf = buffer(offset, per_hop_len)
