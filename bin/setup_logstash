@@ -135,6 +135,15 @@ filter {
           completion_time = last_ts.to_i - first_ts.to_i
           event.set("[flow][completion_time]", completion_time)
         end
+
+        # --- Process request metadata
+        req_metadata = event.get("[int][request_metadata]")
+        if req_metadata && req_metadata.is_a?(Integer)
+          req_id      = (req_metadata >> 8) & 0xFFFF
+          is_response = ((req_metadata >> 7) & 0x1) == 1
+          event.set("[int][request_id]", req_id)
+          event.set("[int][is_response]", is_response)
+        end
       '
     }
 
