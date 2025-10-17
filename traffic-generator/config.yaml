@@ -11,12 +11,8 @@ src_port: 12345
 dst_port: 80
 num_flows: 15
 
-hops:
-  - 1
-  - 2
-  - 3
-  - 4
-  - 5
+rhc: 5
+hops: [1, 2, 3, 4, 5]
 
 instruction_bits: [0, 2, 3, 7]  # Node ID, Hop latency
 
