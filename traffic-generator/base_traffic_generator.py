@@ -1,4 +1,5 @@
 from scapy.all import Ether, IP, TCP, UDP, Raw, wrpcap
+from typing import List
 import os
 import random
 import struct
@@ -55,6 +56,15 @@ def compute_hop_ml(bitmap: int) -> int:
                       if bitmap & (1 << (15 - bit)))
     return total_bytes // 4
 
+def read_initial_rhc(config: dict) -> int:
+    if "rhc" in config:
+        return max(0, min(255, int(config["rhc"])))
+    return max(0, min(255, len(config.get("hops", []))))
+
+def effective_hops(config: dict, initial_rhc: int) -> List[int]:
+    hops = config.get("hops", [])
+    return hops[:min(initial_rhc, len(hops))]
+
 def build_int_shim(hop_ml, num_hops, original_proto):
     # Type(4b)=1, NPT(2b)=2, Reserved(2b)=0 => 0b0001_10_00 = 0x18
     shim_type = (INT_TYPE << 4) | (NPT_L4 << 2)
@@ -105,9 +115,13 @@ def generate_int_packet(i, config, instruction_bitmap, flow):
     payload = Raw(config["payload"].encode())
 
     hop_ml = compute_hop_ml(instruction_bitmap)
-    shim = build_int_shim(hop_ml, len(config["hops"]), config["original_proto"])
-    md_header = build_int_md_header(hop_ml, rhc=0, instruction_bitmap=instruction_bitmap)
-    metadata = build_metadata_stack(config["hops"], instruction_bitmap)
+    initial_rhc = read_initial_rhc(config)
+    hops_to_write = effective_hops(config, initial_rhc)
+
+    shim = build_int_shim(hop_ml, len(hops_to_write), config["original_proto"])
+    final_rhc = max(0, initial_rhc - len(hops_to_write))
+    md_header = build_int_md_header(hop_ml, rhc=final_rhc, instruction_bitmap=instruction_bitmap)
+    metadata = build_metadata_stack(hops_to_write, instruction_bitmap)
 
     return eth / ip / udp / Raw(shim + md_header + metadata) / tcp / payload
 
