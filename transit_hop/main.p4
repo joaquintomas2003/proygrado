@@ -103,23 +103,19 @@ struct headers {
   node_metadata_t  node_metadata;
 }
 
-struct meta_t {
+struct metadata {
   bit<32> node_id;
-  bit<16> ingress_if;
-  bit<16> egress_if;
   bit<32> hop_latency;
   bit<8>  queue_id;
   bit<24> queue_occupancy;
   bit<32> egress_interface_tx;
-
-  // no payload varbit → no parser scratch needed
 }
 
 /*************************************************************************
  ***************************  P A R S E R  *******************************
  *************************************************************************/
 
-parser P(packet_in p, out headers h, inout meta_t m, inout standard_metadata_t sm) {
+parser P(packet_in p, out headers h, inout metadata m, inout standard_metadata_t sm) {
   state start { transition parse_eth; }
 
   state parse_eth {
@@ -163,13 +159,13 @@ parser P(packet_in p, out headers h, inout meta_t m, inout standard_metadata_t s
  ************   C H E C K S U M    V E R I F I C A T I O N   *************
  *************************************************************************/
 
-control Verify(inout headers h, inout meta_t m) { apply { } }
+control Verify(inout headers h, inout metadata m) { apply { } }
 
 /*************************************************************************
  *************   C H E C K S U M    C O M P U T A T I O N   ***************
  *************************************************************************/
 
-control Compute(inout headers h, inout meta_t m) {
+control Compute(inout headers h, inout metadata m) {
   apply {
     update_checksum(
       h.ipv4.isValid(),
@@ -200,12 +196,10 @@ control D(packet_out pkt, in headers h) {
  **************  I N G R E S S   P R O C E S S I N G   *******************
  *************************************************************************/
 
-control I(inout headers h, inout meta_t m, inout standard_metadata_t sm) {
+control I(inout headers h, inout metadata m, inout standard_metadata_t sm) {
   apply {
     // TODO Replace with a register so its configurable
-    m.node_id    = 1001;
-
-    m.ingress_if  = (bit<16>) sm.ingress_port;
+    m.node_id    = 1891;
     sm.egress_spec = VF_02;
   }
 }
@@ -214,7 +208,7 @@ control I(inout headers h, inout meta_t m, inout standard_metadata_t sm) {
  ****************  E G R E S S   P R O C E S S I N G   *******************
  *************************************************************************/
 
-control E(inout headers h, inout meta_t m, inout standard_metadata_t sm) {
+control E(inout headers h, inout metadata m, inout standard_metadata_t sm) {
   apply {
     // Only touch packets that actually carry INT
     if (h.ipv4.isValid() && h.intl4_shim.isValid() && h.int_header.isValid()) {
@@ -231,11 +225,6 @@ control E(inout headers h, inout meta_t m, inout standard_metadata_t sm) {
         return;
       }
 
-      // Measurements (plug real sources)
-      m.egress_if           = (bit<16>) sm.egress_spec;
-      bit<32> deq_delta = (bit<32>) sm.deq_timedelta; // ns on BMv2
-      m.hop_latency = (bit<32>) deq_delta;  // good per-hop approximation on BMv2
-
       // Size/MTU guard
       bit<32> bytes_to_add = (bit<32>) HOP_WORDS * 4;         // 16 bytes
       bit<32> new_ipv4_len = (bit<32>) h.ipv4.total_len + bytes_to_add;
@@ -250,25 +239,24 @@ control E(inout headers h, inout meta_t m, inout standard_metadata_t sm) {
       h.node_metadata.setValid();
 
       // word 0: node_id
-      h.node_metadata.node_id =
-        ((ib & 0x8000) != 0) ? m.node_id : (bit<32>)0;
+      h.node_metadata.node_id = ((ib & 0x8000) != 0) ? m.node_id : (bit<32>) 0;
 
       // word 1: hop_latency
-      h.node_metadata.hop_latency =
-        ((ib & 0x2000) != 0) ? m.hop_latency : (bit<32>)0;
+      h.node_metadata.hop_latency = ((ib & 0x2000) != 0) ? (bit<32>) sm.ingress_global_timestamp - (bit<32>) sm.egress_global_timestamp : (bit<32>) 0;
 
       // word 2: queue_id (high 8) + queue_occupancy (low 24)
-      if ((ib & 0x1000) != 0) {  // if you gated on queue info in instruction bitmap
+      if ((ib & 0x1000) != 0) {
           m.queue_id        = (bit<8>) 0;
           m.queue_occupancy = (bit<24>) sm.deq_qdepth;
       } else {
-          m.queue_id        = 0;
-          m.queue_occupancy = 0;
+          m.queue_id        = (bit<8>) 0;
+          m.queue_occupancy = (bit<24>) 0;
       }
+      h.node_metadata.queue_id        = m.queue_id;
+      h.node_metadata.queue_occupancy = m.queue_occupancy;
 
       // word 3: egress interface TX
-      h.node_metadata.egress_interface_tx =
-        ((ib & 0x0100) != 0) ? (bit<32>)sm.egress_port : (bit<32>)0;
+      h.node_metadata.egress_interface_tx = ((ib & 0x0100) != 0) ? (bit<32>)sm.deq_timedelta : (bit<32>)0;
 
       // INT accounting
       h.int_header.remaining_hop_cnt = h.int_header.remaining_hop_cnt - 1;
