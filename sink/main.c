@@ -92,6 +92,10 @@ static __inline void _write_node_sample(__xwrite int_metric_sample *sample,
   mem_write_atomic(sample, dest, sizeof(*sample));
 }
 
+static __inline int _absdiff(uint32_t a, uint32_t b) {
+  return (a > b) ? (a - b) : (b - a);
+}
+
 int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_data) {
   // Declare the bucket entry variables
   __addr40 __emem bucket_entry *entry = 0;
@@ -281,50 +285,9 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
                         EVENT_T_SWITCH | metric_id,
                         (uint32_t)update_timestamp);
     }
-    absdiff = (node->hop_latency > prev_latest.hop_latency)
-              ? (node->hop_latency - prev_latest.hop_latency)
-              : (prev_latest.hop_latency - node->hop_latency);
+
+    absdiff = _absdiff(node->hop_latency, prev_latest.hop_latency);
     if (absdiff >= THR_C_SWITCH[0]) {
-      _push_event_to_RI(ring_index_ev,
-                        node->node_id,
-                        absdiff,
-                        EVENT_C_SWITCH | metric_id,
-                        (uint32_t)update_timestamp);
-    }
-
-    /* === Per-switch events on QUEUE === */
-    metric_id = METRIC_QUEUE;
-    if (node->queue_occupancy >= THR_T_SWITCH[1]) {
-      _push_event_to_RI(ring_index_ev,
-                        node->node_id,
-                        node->queue_occupancy,
-                        EVENT_T_SWITCH | metric_id,
-                        (uint32_t)update_timestamp);
-    }
-    absdiff = (node->queue_occupancy > prev_latest.queue_occupancy)
-              ? (node->queue_occupancy - prev_latest.queue_occupancy)
-              : (prev_latest.queue_occupancy - node->queue_occupancy);
-    if (absdiff >= THR_C_SWITCH[1]) {
-      _push_event_to_RI(ring_index_ev,
-                        node->node_id,
-                        absdiff,
-                        EVENT_C_SWITCH | metric_id,
-                        (uint32_t)update_timestamp);
-    }
-
-    /* === Per-switch events on EGRESS link utilization === */
-    metric_id = METRIC_EGRESS;
-    if (node->egress_interface_tx >= THR_T_SWITCH[2]) {
-      _push_event_to_RI(ring_index_ev,
-                        node->node_id,
-                        node->egress_interface_tx,
-                        EVENT_T_SWITCH | metric_id,
-                        (uint32_t)update_timestamp);
-    }
-    absdiff = (node->egress_interface_tx > prev_latest.egress_interface_tx)
-              ? (node->egress_interface_tx - prev_latest.egress_interface_tx)
-              : (prev_latest.egress_interface_tx - node->egress_interface_tx);
-    if (absdiff >= THR_C_SWITCH[2]) {
       _push_event_to_RI(ring_index_ev,
                         node->node_id,
                         absdiff,
@@ -356,6 +319,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
     }
   }
   semaphore_up(&global_semaphores[hash_value]);
+
   /* === End-to-end hop-latency events (T/C) === */
   if (e2e_curr_hop >= THR_T_E2E[0]) {
     _push_event_to_RI(ring_index_ev,
@@ -364,55 +328,12 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
                         EVENT_T_E2E | METRIC_HOP,
                         (uint32_t)update_timestamp);
   }
-
-  absdiff = (e2e_curr_hop > e2e_prev_hop)
-            ? (e2e_curr_hop - e2e_prev_hop)
-            : (e2e_prev_hop - e2e_curr_hop);
+  absdiff = _absdiff(e2e_curr_hop, e2e_prev_hop);
   if (absdiff >= THR_C_E2E[0]) {
     _push_event_to_RI(ring_index_ev,
                         E2E_SWITCH_ID,
                         absdiff,
                         EVENT_C_E2E | METRIC_HOP,
-                        (uint32_t)update_timestamp);
-  }
-
-  /* === End-to-end queue-occupancy events (T/C) === */
-  if (e2e_curr_hop >= THR_T_E2E[1]) {
-    _push_event_to_RI(ring_index_ev,
-                        E2E_SWITCH_ID,
-                        e2e_curr_hop,
-                        EVENT_T_E2E | METRIC_QUEUE,
-                        (uint32_t)update_timestamp);
-  }
-
-  absdiff = (e2e_curr_hop > e2e_prev_hop)
-            ? (e2e_curr_hop - e2e_prev_hop)
-            : (e2e_prev_hop - e2e_curr_hop);
-  if (absdiff >= THR_C_E2E[1]) {
-    _push_event_to_RI(ring_index_ev,
-                        E2E_SWITCH_ID,
-                        absdiff,
-                        EVENT_C_E2E | METRIC_QUEUE,
-                        (uint32_t)update_timestamp);
-  }
-
-  /* === End-to-end egress-link-utilization events (T/C) === */
-  if (e2e_curr_hop >= THR_T_E2E[2]) {
-    _push_event_to_RI(ring_index_ev,
-                        E2E_SWITCH_ID,
-                        e2e_curr_hop,
-                        EVENT_T_E2E | METRIC_EGRESS,
-                        (uint32_t)update_timestamp);
-  }
-
-  absdiff = (e2e_curr_hop > e2e_prev_hop)
-            ? (e2e_curr_hop - e2e_prev_hop)
-            : (e2e_prev_hop - e2e_curr_hop);
-  if (absdiff >= THR_C_E2E[2]) {
-    _push_event_to_RI(ring_index_ev,
-                        E2E_SWITCH_ID,
-                        absdiff,
-                        EVENT_C_E2E | METRIC_EGRESS,
                         (uint32_t)update_timestamp);
   }
 
