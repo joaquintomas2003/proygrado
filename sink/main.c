@@ -102,6 +102,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   __xrw int_metric_sample avg_sample;
   __xrw uint32_t nodes_present;
   __xrw uint64_t update_timestamp;
+  __xrw uint32_t request_meta;
   __xwrite int_metric_sample sample;
   int i, k;
   uint32_t hash_key[4];
@@ -123,6 +124,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   __xwrite uint32_t key_lru[4];
   __xwrite uint32_t packet_count_lru;
   __xwrite uint64_t first_packet_timestamp_lru;
+  __xwrite uint32_t request_meta_lru;
 
   __xrw int_metric_sample prev_latest;
   uint32_t e2e_prev_hop = 0, e2e_curr_hop = 0;
@@ -136,6 +138,8 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   __lmem struct pif_header_ingress__bitmap *bitmap;
   __lmem struct pif_header_intrinsic_metadata *intrinsic_metadata;
   __lmem struct pif_header_ingress__node1_metadata *node;
+
+  PIF_PLUGIN_app_metadata_T *app_metadata = pif_plugin_hdr_get_app_metadata(headers);
 
   // Get the hash key from the 5-tuple
   if (_get_hash_key(headers, hash_key) < 0) {
@@ -199,11 +203,15 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
         key_lru[3] = victim_entry->key[3];
         packet_count_lru = victim_entry->packet_count;
         first_packet_timestamp_lru = victim_entry->first_packet_timestamp;
+        request_meta_lru = victim_entry->request_meta;
 
         mem_write_atomic(key_lru, &ring_entry->key, sizeof(key_lru));
         mem_write_atomic(&packet_count_lru, &ring_entry->packet_count, sizeof(packet_count_lru));
         mem_write_atomic(&first_packet_timestamp_lru, &ring_entry->first_packet_timestamp, sizeof(first_packet_timestamp_lru));
         mem_write_atomic(&timestamp, &ring_entry->last_update_timestamp, sizeof(timestamp));
+
+        mem_write_atomic(&request_meta_lru, &ring_entry->request_meta, sizeof(request_meta_lru));
+
         mem_write_atomic(&nodes_present, &ring_entry->int_metric_info_value.node_count, sizeof(nodes_present));
 
         for (k = 0; k < nodes_present && k < MAX_INT_NODES; k++) {
@@ -263,6 +271,9 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
 
     // Set the first packet timestamp
     mem_write_atomic(&update_timestamp, &entry->first_packet_timestamp, sizeof(update_timestamp));
+
+    request_meta = app_metadata->request_metadata;
+    mem_write_atomic(&request_meta, &entry->request_meta, sizeof(request_meta));
   }
 
   for (k = 0; k < nodes_present && k < MAX_INT_NODES; k++) {

@@ -66,6 +66,10 @@ header tcp_t {
   bit<16> urgent_ptr;
 }
 
+header app_metadata_t {
+  bit<24> request_metadata;
+}
+
 header intl4_shim_t {
   bit<4> int_type;                // Type of INT Header
   bit<2> npt;                     // Next protocol type
@@ -157,6 +161,8 @@ struct headers {
   stack_element_t[12]          node3_raw_data;
   stack_element_t[12]          node4_raw_data;
   stack_element_t[12]          node5_raw_data;
+
+  app_metadata_t app_metadata;
 }
 
 /*************************************************************************
@@ -321,7 +327,7 @@ parser MyParser(packet_in packet,
   state check_npt {
     transition select(hdr.intl4_shim.npt) {
       2: check_protocol;
-      default: accept;
+      default: parse_application;
     }
   }
 
@@ -334,6 +340,11 @@ parser MyParser(packet_in packet,
 
   state parse_tcp {
     packet.extract(hdr.tcp);
+    transition parse_application;
+  }
+
+  state parse_application {
+    packet.extract(hdr.app_metadata);
     transition accept;
   }
 }
@@ -388,6 +399,7 @@ control MyDeparser(packet_out packet, in headers hdr) {
     packet.emit(hdr.node3_raw_data);
     packet.emit(hdr.node4_raw_data);
     packet.emit(hdr.node5_raw_data);
+    packet.emit(hdr.app_metadata);
   }
 }
 
@@ -535,7 +547,9 @@ control MyIngress(inout headers hdr,
       }
 
       if (hdr.intl4_shim.isValid()) {
-        save_in_hash();
+        if (hdr.app_metadata.isValid()){
+          save_in_hash();
+        }
       }
     }
   }
