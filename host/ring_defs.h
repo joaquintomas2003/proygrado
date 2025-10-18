@@ -30,7 +30,8 @@ typedef struct bucket_entry {
     uint64_t last_update_timestamp;
     int_metric_info int_metric_info_value;
     uint32_t packet_count;
-    uint64_t _padding;
+    uint32_t request_meta; // bits 0–15: request_id, bit 16: is_response, bits 17–31: reserved
+    uint32_t _padding;
 } bucket_entry;
 
 typedef struct bucket_list {

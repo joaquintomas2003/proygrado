@@ -15,6 +15,7 @@
 //   - flow.last_update_ts      : NIC raw timestamp (ns)
 //   - int.node_count           : # INT nodes
 //   - int.latest[] / average[] : arrays of {node_id, hop_latency, queue_occupancy, egress_interface_tx}
+//   - int.request_metadata     : 16 bits request id + 1 bit is_response + 7 bits reserved
 //
 // Notes:
 //   - No Bulk action lines; NDJSON is compatible with Filebeat filestream+ndjson parser.
@@ -224,6 +225,7 @@ static void write_doc_ndjson(FILE *fp, const bucket_entry *e,
             "\"last_update_ts\":%llu"
           "},"
           "\"int\":{"
+            "\"request_metadata\":%u,"
             "\"node_count\":%u,"
             "\"latest\":",
         ts_now, hostname,
@@ -231,6 +233,7 @@ static void write_doc_ndjson(FILE *fp, const bucket_entry *e,
         e->packet_count,
         (unsigned long long)e->first_packet_timestamp,
         (unsigned long long)e->last_update_timestamp,
+        e->request_meta,
         n
     );
 
