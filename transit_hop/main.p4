@@ -110,8 +110,6 @@ struct meta_t {
   bit<32> hop_latency;
   bit<8>  queue_id;
   bit<24> queue_occupancy;
-  bit<64> ingress_timestamp;
-  bit<64> egress_timestamp;
   bit<32> egress_interface_tx;
 
   // no payload varbit → no parser scratch needed
@@ -204,10 +202,7 @@ control D(packet_out pkt, in headers h) {
 
 control I(inout headers h, inout meta_t m, inout standard_metadata_t sm) {
   apply {
-    // TODO Replace with your ingress timestamp source
-    m.ingress_timestamp = 1891;
-
-    // TODO Replace with the real node id
+    // TODO Replace with a register so its configurable
     m.node_id    = 1001;
 
     m.ingress_if  = (bit<16>) sm.ingress_port;
@@ -238,11 +233,8 @@ control E(inout headers h, inout meta_t m, inout standard_metadata_t sm) {
 
       // Measurements (plug real sources)
       m.egress_if           = (bit<16>) sm.egress_spec;
-      m.egress_timestamp    = 2025;                           // TODO
-      m.hop_latency         = (bit<32>)(m.egress_timestamp - m.ingress_timestamp);
-      m.queue_id            = (bit<8>)0;                      // TODO
-      m.queue_occupancy     = 654321;                         // TODO
-      m.egress_interface_tx = 123456;                         // TODO
+      bit<32> deq_delta = (bit<32>) sm.deq_timedelta; // ns on BMv2
+      m.hop_latency = (bit<32>) deq_delta;  // good per-hop approximation on BMv2
 
       // Size/MTU guard
       bit<32> bytes_to_add = (bit<32>) HOP_WORDS * 4;         // 16 bytes
@@ -266,17 +258,17 @@ control E(inout headers h, inout meta_t m, inout standard_metadata_t sm) {
         ((ib & 0x2000) != 0) ? m.hop_latency : (bit<32>)0;
 
       // word 2: queue_id (high 8) + queue_occupancy (low 24)
-      if ((ib & 0x1000) != 0) {
-        h.node_metadata.queue_id        = m.queue_id;
-        h.node_metadata.queue_occupancy = (bit<24>) m.queue_occupancy;
+      if ((ib & 0x1000) != 0) {  // if you gated on queue info in instruction bitmap
+          m.queue_id        = (bit<8>) 0;
+          m.queue_occupancy = (bit<24>) sm.deq_qdepth;
       } else {
-        h.node_metadata.queue_id        = 0;
-        h.node_metadata.queue_occupancy = 0;
+          m.queue_id        = 0;
+          m.queue_occupancy = 0;
       }
 
       // word 3: egress interface TX
       h.node_metadata.egress_interface_tx =
-        ((ib & 0x0100) != 0) ? m.egress_interface_tx : (bit<32>)0;
+        ((ib & 0x0100) != 0) ? (bit<32>)sm.egress_port : (bit<32>)0;
 
       // INT accounting
       h.int_header.remaining_hop_cnt = h.int_header.remaining_hop_cnt - 1;
