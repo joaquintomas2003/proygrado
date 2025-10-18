@@ -129,6 +129,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   uint32_t absdiff;
   uint32_t metric_id;
   uint32_t ring_index_ev;
+  uint32_t hop_latency;
 
   // Declare the metadata variables
   __lmem struct pif_header_scalars *scalars;
@@ -264,42 +265,41 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
     mem_write_atomic(&update_timestamp, &entry->first_packet_timestamp, sizeof(update_timestamp));
   }
 
-  /* Build the previous end-to-end hop sum before we overwrite latest[] */
-  for (k = 0; k < nodes_present && k < MAX_INT_NODES; k++) {
-    mem_read_atomic(&prev_latest, &entry->int_metric_info_value.latest[k], sizeof(prev_latest));
-    e2e_prev_hop += prev_latest.hop_latency;
-  }
-
   for (k = 0; k < nodes_present && k < MAX_INT_NODES; k++) {
     node = (__lmem struct pif_header_ingress__node1_metadata *)node_metadata_ptrs[k];
 
     /* NOTE: We control C-events when there is more than one packet */
     /* === Per-switch T-events on HOP === */
     metric_id = METRIC_HOP;
-    if (node->hop_latency >= THR_T_SWITCH[0]) {
+    hop_latency = node->hop_latency;
+
+    if (hop_latency >= THR_T_SWITCH[0]) {
       _push_event_to_RI(ring_index_ev,
                         node->node_id,
-                        node->hop_latency,
+                        hop_latency,
                         EVENT_T_SWITCH | metric_id,
                         (uint32_t)update_timestamp);
     }
 
     /* === Maintain end-to-end current hop sum as we go === */
-    e2e_curr_hop += node->hop_latency;
+    e2e_curr_hop += hop_latency;
 
     /* Write latest sample */
-    sample.node_id = node->node_id;
-    sample.hop_latency = node->hop_latency;
-    sample.queue_occupancy = node->queue_occupancy;
+    sample.node_id             = node->node_id;
+    sample.hop_latency         = hop_latency;
+    sample.queue_occupancy     = node->queue_occupancy;
     sample.egress_interface_tx = node->egress_interface_tx;
-    
+
     if (entry->packet_count > 1) {
 
       /* Read previous latest BEFORE overwriting, for C-events */
       mem_read_atomic(&prev_latest, &entry->int_metric_info_value.latest[k], sizeof(prev_latest));
 
+      /* Build the previous end-to-end hop sum before we overwrite latest[] */
+      e2e_prev_hop += prev_latest.hop_latency;
+
       /* === Per-switch C-events on HOP === */
-      absdiff = _absdiff(node->hop_latency, prev_latest.hop_latency);
+      absdiff = _absdiff(hop_latency, prev_latest.hop_latency);
       if (absdiff >= THR_C_SWITCH[0]) {
         _push_event_to_RI(ring_index_ev,
                           node->node_id,
@@ -310,38 +310,38 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
       mem_read_atomic(&avg_sample, &entry->int_metric_info_value.average[k], sizeof(avg_sample));
 
       avg_sample.node_id             = node->node_id;
-      avg_sample.hop_latency         = (avg_sample.hop_latency         * (entry->packet_count - 1) + node->hop_latency)         / entry->packet_count;
+      avg_sample.hop_latency         = (avg_sample.hop_latency         * (entry->packet_count - 1) + hop_latency)               / entry->packet_count;
       avg_sample.queue_occupancy     = (avg_sample.queue_occupancy     * (entry->packet_count - 1) + node->queue_occupancy)     / entry->packet_count;
       avg_sample.egress_interface_tx = (avg_sample.egress_interface_tx * (entry->packet_count - 1) + node->egress_interface_tx) / entry->packet_count;
 
       mem_write_atomic(&avg_sample, &entry->int_metric_info_value.average[k], sizeof(avg_sample));
     } else {
       mem_write_atomic(&sample, &entry->int_metric_info_value.average[k], sizeof(sample));
-    }
 
+      /* This way, we wont trigger a C-event e2e */
+      e2e_prev_hop = e2e_curr_hop;
+    }
     /* We can write after the IF without problem */
     mem_write_atomic(&sample, &entry->int_metric_info_value.latest[k], sizeof(sample));
-
-
   }
   semaphore_up(&global_semaphores[hash_value]);
 
-  // /* === End-to-end hop-latency events (T/C) === */
-  // if (e2e_curr_hop >= THR_T_E2E[0]) {
-  //   _push_event_to_RI(ring_index_ev,
-  //                       E2E_SWITCH_ID,
-  //                       e2e_curr_hop,
-  //                       EVENT_T_E2E | METRIC_HOP,
-  //                       (uint32_t)update_timestamp);
-  // }
-  // absdiff = _absdiff(e2e_curr_hop, e2e_prev_hop);
-  // if (absdiff >= THR_C_E2E[0]) {
-  //   _push_event_to_RI(ring_index_ev,
-  //                       E2E_SWITCH_ID,
-  //                       absdiff,
-  //                       EVENT_C_E2E | METRIC_HOP,
-  //                       (uint32_t)update_timestamp);
-  // }
+  /* === End-to-end hop-latency events (T/C) === */
+  if (e2e_curr_hop >= THR_T_E2E[0]) {
+    _push_event_to_RI(ring_index_ev,
+                      E2E_SWITCH_ID,
+                      e2e_curr_hop,
+                      EVENT_T_E2E | METRIC_HOP,
+                      (uint32_t)update_timestamp);
+  }
+  absdiff = _absdiff(e2e_curr_hop, e2e_prev_hop);
+  if (absdiff >= THR_C_E2E[0]) {
+    _push_event_to_RI(ring_index_ev,
+                      E2E_SWITCH_ID,
+                      absdiff,
+                      EVENT_C_E2E | METRIC_HOP,
+                      (uint32_t)update_timestamp);
+  }
 
   return PIF_PLUGIN_RETURN_FORWARD;
 }
