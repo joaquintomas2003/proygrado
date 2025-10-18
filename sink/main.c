@@ -41,13 +41,13 @@ static __inline int _push_event_to_RI(uint32_t ring_index,
                                       uint32_t switch_id,
                                       uint32_t value,
                                       uint32_t event_bitmap,
-                                      uint32_t ts_low32) {
+                                      uint64_t event_timestamp) {
   __addr40 __emem ring_meta *ri_meta;
   __addr40 __emem event_record *slot;
   uint32_t wp, rp, f;
   __xrw ring_meta md_buf; /* [0]=wp, [1]=rp, [2]=full */
-  __xwrite uint32_t wr0[4];
-
+  __xwrite uint32_t wr0[3];
+  __xwrite uint64_t timestamp = event_timestamp;
   semaphore_down(&ring_buffer_sem_I[ring_index]);
   ri_meta = &ring_I[ring_index];
 
@@ -63,8 +63,9 @@ static __inline int _push_event_to_RI(uint32_t ring_index,
   wr0[0] = switch_id;
   wr0[1] = value;
   wr0[2] = event_bitmap;
-  wr0[3] = ts_low32;
+
   mem_write_atomic(wr0, slot, sizeof(wr0));
+  mem_write_atomic(&timestamp, &slot->event_timestamp, sizeof(timestamp));
 
   wp = (wp + 1) & (RING_SIZE - 1);
   if (wp == rp) f = 1;
@@ -92,6 +93,10 @@ static __inline void _write_node_sample(__xwrite int_metric_sample *sample,
   mem_write_atomic(sample, dest, sizeof(*sample));
 }
 
+static __inline int _absdiff(uint32_t a, uint32_t b) {
+  return (a > b) ? (a - b) : (b - a);
+}
+
 int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_data) {
   // Declare the bucket entry variables
   __addr40 __emem bucket_entry *entry = 0;
@@ -108,6 +113,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   __xrw uint64_t timestamp;
   uint64_t min_ts = 0xFFFFFFFFFFFFFFFFULL;
   uint64_t aged_ts;
+  uint64_t event_timestamp;
   uint32_t evict_selected = 0;
   uint32_t wp, rp, f;
   uint32_t ring_index;
@@ -127,6 +133,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   uint32_t absdiff;
   uint32_t metric_id;
   uint32_t ring_index_ev;
+  uint32_t hop_latency;
 
   // Declare the metadata variables
   __lmem struct pif_header_scalars *scalars;
@@ -252,6 +259,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   // Save the last update timestamp
   update_timestamp = ticks_to_ns(me_tsc_read());
   mem_write_atomic(&update_timestamp, &entry->last_update_timestamp, sizeof(update_timestamp));
+  event_timestamp = entry->last_update_timestamp;
 
   // Increment the packet count
   mem_incr32(&entry->packet_count);
@@ -271,160 +279,82 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
     mem_write_atomic(&request_meta, &entry->request_meta, sizeof(request_meta));
   }
 
-  /* Build the previous end-to-end hop sum before we overwrite latest[] */
-  for (k = 0; k < nodes_present && k < MAX_INT_NODES; k++) {
-    mem_read_atomic(&prev_latest, &entry->int_metric_info_value.latest[k], sizeof(prev_latest));
-    e2e_prev_hop += prev_latest.hop_latency;
-  }
-
   for (k = 0; k < nodes_present && k < MAX_INT_NODES; k++) {
     node = (__lmem struct pif_header_ingress__node1_metadata *)node_metadata_ptrs[k];
 
-    /* Read previous latest BEFORE overwriting, for C-events */
-    mem_read_atomic(&prev_latest, &entry->int_metric_info_value.latest[k], sizeof(prev_latest));
-
-    /* === Per-switch events on HOP === */
+    /* NOTE: We control C-events when there is more than one packet */
+    /* === Per-switch T-events on HOP === */
     metric_id = METRIC_HOP;
-    if (node->hop_latency >= THR_T_SWITCH[0]) {
-      _push_event_to_RI(ring_index_ev,
-                        node->node_id,
-                        node->hop_latency,
-                        EVENT_T_SWITCH | metric_id,
-                        (uint32_t)update_timestamp);
-    }
-    absdiff = (node->hop_latency > prev_latest.hop_latency)
-              ? (node->hop_latency - prev_latest.hop_latency)
-              : (prev_latest.hop_latency - node->hop_latency);
-    if (absdiff >= THR_C_SWITCH[0]) {
-      _push_event_to_RI(ring_index_ev,
-                        node->node_id,
-                        absdiff,
-                        EVENT_C_SWITCH | metric_id,
-                        (uint32_t)update_timestamp);
-    }
+    hop_latency = node->hop_latency;
 
-    /* === Per-switch events on QUEUE === */
-    metric_id = METRIC_QUEUE;
-    if (node->queue_occupancy >= THR_T_SWITCH[1]) {
+    if (hop_latency >= THR_T_SWITCH[0]) {
       _push_event_to_RI(ring_index_ev,
                         node->node_id,
-                        node->queue_occupancy,
+                        hop_latency,
                         EVENT_T_SWITCH | metric_id,
-                        (uint32_t)update_timestamp);
-    }
-    absdiff = (node->queue_occupancy > prev_latest.queue_occupancy)
-              ? (node->queue_occupancy - prev_latest.queue_occupancy)
-              : (prev_latest.queue_occupancy - node->queue_occupancy);
-    if (absdiff >= THR_C_SWITCH[1]) {
-      _push_event_to_RI(ring_index_ev,
-                        node->node_id,
-                        absdiff,
-                        EVENT_C_SWITCH | metric_id,
-                        (uint32_t)update_timestamp);
-    }
-
-    /* === Per-switch events on EGRESS link utilization === */
-    metric_id = METRIC_EGRESS;
-    if (node->egress_interface_tx >= THR_T_SWITCH[2]) {
-      _push_event_to_RI(ring_index_ev,
-                        node->node_id,
-                        node->egress_interface_tx,
-                        EVENT_T_SWITCH | metric_id,
-                        (uint32_t)update_timestamp);
-    }
-    absdiff = (node->egress_interface_tx > prev_latest.egress_interface_tx)
-              ? (node->egress_interface_tx - prev_latest.egress_interface_tx)
-              : (prev_latest.egress_interface_tx - node->egress_interface_tx);
-    if (absdiff >= THR_C_SWITCH[2]) {
-      _push_event_to_RI(ring_index_ev,
-                        node->node_id,
-                        absdiff,
-                        EVENT_C_SWITCH | metric_id,
-                        (uint32_t)update_timestamp);
+                        event_timestamp);
     }
 
     /* === Maintain end-to-end current hop sum as we go === */
-    e2e_curr_hop += node->hop_latency;
+    e2e_curr_hop += hop_latency;
 
     /* Write latest sample */
-    sample.node_id = node->node_id;
-    sample.hop_latency = node->hop_latency;
-    sample.queue_occupancy = node->queue_occupancy;
+    sample.node_id             = node->node_id;
+    sample.hop_latency         = hop_latency;
+    sample.queue_occupancy     = node->queue_occupancy;
     sample.egress_interface_tx = node->egress_interface_tx;
-    mem_write_atomic(&sample, &entry->int_metric_info_value.latest[k], sizeof(sample));
 
     if (entry->packet_count > 1) {
+
+      /* Read previous latest BEFORE overwriting, for C-events */
+      mem_read_atomic(&prev_latest, &entry->int_metric_info_value.latest[k], sizeof(prev_latest));
+
+      /* Build the previous end-to-end hop sum before we overwrite latest[] */
+      e2e_prev_hop += prev_latest.hop_latency;
+
+      /* === Per-switch C-events on HOP === */
+      absdiff = _absdiff(hop_latency, prev_latest.hop_latency);
+      if (absdiff >= THR_C_SWITCH[0]) {
+        _push_event_to_RI(ring_index_ev,
+                          node->node_id,
+                          absdiff,
+                          EVENT_C_SWITCH | metric_id,
+                          event_timestamp);
+      }
       mem_read_atomic(&avg_sample, &entry->int_metric_info_value.average[k], sizeof(avg_sample));
 
-      avg_sample.node_id = node->node_id;
-      avg_sample.hop_latency = (avg_sample.hop_latency * (entry->packet_count - 1) + node->hop_latency) / entry->packet_count;
-      avg_sample.queue_occupancy = (avg_sample.queue_occupancy * (entry->packet_count - 1) + node->queue_occupancy) / entry->packet_count;
+      avg_sample.node_id             = node->node_id;
+      avg_sample.hop_latency         = (avg_sample.hop_latency         * (entry->packet_count - 1) + hop_latency)               / entry->packet_count;
+      avg_sample.queue_occupancy     = (avg_sample.queue_occupancy     * (entry->packet_count - 1) + node->queue_occupancy)     / entry->packet_count;
       avg_sample.egress_interface_tx = (avg_sample.egress_interface_tx * (entry->packet_count - 1) + node->egress_interface_tx) / entry->packet_count;
 
       mem_write_atomic(&avg_sample, &entry->int_metric_info_value.average[k], sizeof(avg_sample));
     } else {
       mem_write_atomic(&sample, &entry->int_metric_info_value.average[k], sizeof(sample));
+
+      /* This way, we wont trigger a C-event e2e */
+      e2e_prev_hop = e2e_curr_hop;
     }
+    /* We can write after the IF without problem */
+    mem_write_atomic(&sample, &entry->int_metric_info_value.latest[k], sizeof(sample));
   }
   semaphore_up(&global_semaphores[hash_value]);
+
   /* === End-to-end hop-latency events (T/C) === */
   if (e2e_curr_hop >= THR_T_E2E[0]) {
     _push_event_to_RI(ring_index_ev,
-                        E2E_SWITCH_ID,
-                        e2e_curr_hop,
-                        EVENT_T_E2E | METRIC_HOP,
-                        (uint32_t)update_timestamp);
+                      E2E_SWITCH_ID,
+                      e2e_curr_hop,
+                      EVENT_T_E2E | METRIC_HOP,
+                      event_timestamp);
   }
-
-  absdiff = (e2e_curr_hop > e2e_prev_hop)
-            ? (e2e_curr_hop - e2e_prev_hop)
-            : (e2e_prev_hop - e2e_curr_hop);
+  absdiff = _absdiff(e2e_curr_hop, e2e_prev_hop);
   if (absdiff >= THR_C_E2E[0]) {
     _push_event_to_RI(ring_index_ev,
-                        E2E_SWITCH_ID,
-                        absdiff,
-                        EVENT_C_E2E | METRIC_HOP,
-                        (uint32_t)update_timestamp);
-  }
-
-  /* === End-to-end queue-occupancy events (T/C) === */
-  if (e2e_curr_hop >= THR_T_E2E[1]) {
-    _push_event_to_RI(ring_index_ev,
-                        E2E_SWITCH_ID,
-                        e2e_curr_hop,
-                        EVENT_T_E2E | METRIC_QUEUE,
-                        (uint32_t)update_timestamp);
-  }
-
-  absdiff = (e2e_curr_hop > e2e_prev_hop)
-            ? (e2e_curr_hop - e2e_prev_hop)
-            : (e2e_prev_hop - e2e_curr_hop);
-  if (absdiff >= THR_C_E2E[1]) {
-    _push_event_to_RI(ring_index_ev,
-                        E2E_SWITCH_ID,
-                        absdiff,
-                        EVENT_C_E2E | METRIC_QUEUE,
-                        (uint32_t)update_timestamp);
-  }
-
-  /* === End-to-end egress-link-utilization events (T/C) === */
-  if (e2e_curr_hop >= THR_T_E2E[2]) {
-    _push_event_to_RI(ring_index_ev,
-                        E2E_SWITCH_ID,
-                        e2e_curr_hop,
-                        EVENT_T_E2E | METRIC_EGRESS,
-                        (uint32_t)update_timestamp);
-  }
-
-  absdiff = (e2e_curr_hop > e2e_prev_hop)
-            ? (e2e_curr_hop - e2e_prev_hop)
-            : (e2e_prev_hop - e2e_curr_hop);
-  if (absdiff >= THR_C_E2E[2]) {
-    _push_event_to_RI(ring_index_ev,
-                        E2E_SWITCH_ID,
-                        absdiff,
-                        EVENT_C_E2E | METRIC_EGRESS,
-                        (uint32_t)update_timestamp);
+                      E2E_SWITCH_ID,
+                      absdiff,
+                      EVENT_C_E2E | METRIC_HOP,
+                      event_timestamp);
   }
 
   return PIF_PLUGIN_RETURN_FORWARD;

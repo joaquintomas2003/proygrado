@@ -42,6 +42,9 @@
 /* Special switch_id for end-to-end events */
 #define E2E_SWITCH_ID  0xFFFFFFFF
 
+/* Number of metrics to be monitorized */
+#define NUM_METRICS 1
+
 typedef struct int_metric_sample {
   uint32_t node_id; /* Node ID */
   // uint32_t ingress_and_egress_interface_id; /* Level 1 ingress interface ID */
@@ -80,10 +83,11 @@ typedef struct ring_list {
 } ring_list;
 
 typedef struct event_record {
-  uint32_t switch_id;     /* per-switch id, or 0xFFFFFFFF for E2E */
-  uint32_t value;         /* metric value or delta */
-  uint32_t event_bitmap;  /* encodes type & metric */
-  uint32_t ts_low32;      /* truncated timestamp (lower 32 bits) */
+  uint32_t switch_id;       /* per-switch id, or 0xFFFFFFFF for E2E */
+  uint32_t value;           /* metric value or delta */
+  uint32_t event_bitmap;    /* encodes type & metric */
+  uint64_t event_timestamp; /* timestamp of the event */
+  uint64_t _padding;
 } event_record;
 
 typedef struct event_ring_list {
@@ -97,10 +101,10 @@ typedef struct ring_meta {
   uint32_t _padding;
 } ring_meta;
 
-__export __emem uint32_t THR_T_SWITCH[3] = {0, 0, 0};
-__export __emem uint32_t THR_C_SWITCH[3] = {0, 0, 0};
-__export __emem uint32_t THR_T_E2E[3] = {0, 0, 0};
-__export __emem uint32_t THR_C_E2E[3] = {0, 0, 0};
+__export __emem uint32_t THR_T_SWITCH[NUM_METRICS] = {700};
+__export __emem uint32_t THR_C_SWITCH[NUM_METRICS] = {300};
+__export __emem uint32_t THR_T_E2E[NUM_METRICS]    = {3500};
+__export __emem uint32_t THR_C_E2E[NUM_METRICS]    = {900};
 
 __export __emem bucket_list int_flowcache[FLOWCACHE_ROWS];
 
@@ -111,8 +115,8 @@ __export __emem event_ring_list ring_buffer_I[NUM_RINGS];
 __export __emem ring_meta ring_I[NUM_RINGS];
 
 volatile __emem __export uint32_t global_semaphores[FLOWCACHE_ROWS] = {x1024};
-volatile __emem __export uint32_t ring_buffer_sem_G[NUM_RINGS] = {x8};
-volatile __emem __export uint32_t ring_buffer_sem_I[NUM_RINGS] = {x8};
+volatile __emem __export uint32_t ring_buffer_sem_G[NUM_RINGS]      = {x8};
+volatile __emem __export uint32_t ring_buffer_sem_I[NUM_RINGS]      = {x8};
 
 static __inline void semaphore_down(volatile __declspec(mem addr40) void * addr) {
   unsigned int addr_hi, addr_lo;

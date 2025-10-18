@@ -53,7 +53,9 @@ typedef struct event_record {
     uint32_t switch_id;
     uint32_t value;
     uint32_t event_bitmap;
-    uint32_t ts_low32;
+    uint32_t _padding1;
+    uint64_t event_timestamp;
+    uint64_t _padding2;
 } event_record;
 
 typedef struct event_ring_list {
