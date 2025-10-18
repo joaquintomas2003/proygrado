@@ -41,13 +41,13 @@ static __inline int _push_event_to_RI(uint32_t ring_index,
                                       uint32_t switch_id,
                                       uint32_t value,
                                       uint32_t event_bitmap,
-                                      uint32_t ts_low32) {
+                                      uint64_t event_timestamp) {
   __addr40 __emem ring_meta *ri_meta;
   __addr40 __emem event_record *slot;
   uint32_t wp, rp, f;
   __xrw ring_meta md_buf; /* [0]=wp, [1]=rp, [2]=full */
-  __xwrite uint32_t wr0[4];
-
+  __xwrite uint32_t wr0[3];
+  __xwrite uint64_t timestamp = event_timestamp;
   semaphore_down(&ring_buffer_sem_I[ring_index]);
   ri_meta = &ring_I[ring_index];
 
@@ -63,8 +63,9 @@ static __inline int _push_event_to_RI(uint32_t ring_index,
   wr0[0] = switch_id;
   wr0[1] = value;
   wr0[2] = event_bitmap;
-  wr0[3] = ts_low32;
+
   mem_write_atomic(wr0, slot, sizeof(wr0));
+  mem_write_atomic(&timestamp, &slot->event_timestamp, sizeof(timestamp));
 
   wp = (wp + 1) & (RING_SIZE - 1);
   if (wp == rp) f = 1;
@@ -112,6 +113,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   __xrw uint64_t timestamp;
   uint64_t min_ts = 0xFFFFFFFFFFFFFFFFULL;
   uint64_t aged_ts;
+  uint64_t event_timestamp;
   uint32_t evict_selected = 0;
   uint32_t wp, rp, f;
   uint32_t ring_index;
@@ -257,6 +259,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   // Save the last update timestamp
   update_timestamp = ticks_to_ns(me_tsc_read());
   mem_write_atomic(&update_timestamp, &entry->last_update_timestamp, sizeof(update_timestamp));
+  event_timestamp = entry->last_update_timestamp;
 
   // Increment the packet count
   mem_incr32(&entry->packet_count);
@@ -289,7 +292,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
                         node->node_id,
                         hop_latency,
                         EVENT_T_SWITCH | metric_id,
-                        (uint32_t)update_timestamp);
+                        event_timestamp);
     }
 
     /* === Maintain end-to-end current hop sum as we go === */
@@ -316,7 +319,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
                           node->node_id,
                           absdiff,
                           EVENT_C_SWITCH | metric_id,
-                          (uint32_t)update_timestamp);
+                          event_timestamp);
       }
       mem_read_atomic(&avg_sample, &entry->int_metric_info_value.average[k], sizeof(avg_sample));
 
@@ -343,7 +346,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
                       E2E_SWITCH_ID,
                       e2e_curr_hop,
                       EVENT_T_E2E | METRIC_HOP,
-                      (uint32_t)update_timestamp);
+                      event_timestamp);
   }
   absdiff = _absdiff(e2e_curr_hop, e2e_prev_hop);
   if (absdiff >= THR_C_E2E[0]) {
@@ -351,7 +354,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
                       E2E_SWITCH_ID,
                       absdiff,
                       EVENT_C_E2E | METRIC_HOP,
-                      (uint32_t)update_timestamp);
+                      event_timestamp);
   }
 
   return PIF_PLUGIN_RETURN_FORWARD;

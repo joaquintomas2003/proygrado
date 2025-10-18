@@ -86,7 +86,8 @@ typedef struct event_record {
   uint32_t switch_id;     /* per-switch id, or 0xFFFFFFFF for E2E */
   uint32_t value;         /* metric value or delta */
   uint32_t event_bitmap;  /* encodes type & metric */
-  uint32_t ts_low32;      /* truncated timestamp (lower 32 bits) */
+  uint64_t event_timestamp;      /* truncated timestamp (lower 32 bits) */
+  uint64_t _padding;
 } event_record;
 
 typedef struct event_ring_list {
