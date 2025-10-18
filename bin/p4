@@ -73,6 +73,33 @@ case "$COMMAND" in
     echo -e "${GREEN}✅ Compilation complete: $FIRMWARE_PATH${NC}"
     ;;
 
+  build_transit_hop)
+    P4_FILE="main.p4"
+    EXTRA_ARGS=("$@")
+
+    if [ ! -f "$P4_FILE" ]; then
+      echo -e "${RED}❌ File not found: $P4_FILE${NC}"
+      exit 1
+    fi
+
+    echo -e "${GREEN}Compiling $P4_FILE with main.c...${NC}"
+    mkdir -p "$(dirname "$FIRMWARE_PATH")" pifout
+
+    /opt/netronome/p4/bin/nfp4build \
+      --nfp4c_p4_version 16 \
+      --no-debug-info \
+      -p pifout \
+      -o "$FIRMWARE_PATH" \
+      -l lithium \
+      --shared-codestore \
+      --verbose-generate \
+      --verbose-build \
+      -4 "$P4_FILE" \
+      "${EXTRA_ARGS[@]}"
+
+    echo -e "${GREEN}✅ Compilation complete: $FIRMWARE_PATH${NC}"
+    ;;
+
   design-load)
     echo -e "${GREEN}Loading firmware from $FIRMWARE_PATH...${NC}"
     /opt/netronome/p4/bin/rtecli -r "$RTE_HOST" -p "$RTE_PORT" -d "$DEVICE_ID" design-load -f "$FIRMWARE_PATH" -p "$PIF_JSON_PATH"
