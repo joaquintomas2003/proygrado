@@ -212,16 +212,7 @@ parser MyParser(packet_in packet,
     packet.extract(hdr.int_header);
 
     /* INT spec: RemainingHopCnt = unused nodes; we parse up to MAX_INT_NODES */
-    hop_ml_val = hdr.int_header.hop_metadata_len;
-    if (hop_ml_val != 0) {
-      meta.nodes_present = meta.stack_size / hop_ml_val;
-    } else {
-      meta.nodes_present = 0;
-    }
-
-    if (meta.nodes_present > MAX_INT_NODES) {
-      meta.nodes_present = MAX_INT_NODES;
-    }
+    meta.nodes_present = meta.stack_size / hdr.int_header.hop_metadata_len;
 
     meta.node1_entries = 0;
     meta.node2_entries = 0;
