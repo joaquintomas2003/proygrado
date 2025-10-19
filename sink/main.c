@@ -117,6 +117,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   uint32_t evict_selected = 0;
   uint32_t wp, rp, f;
   uint32_t ring_index;
+  uint32_t cant_nodes;
   __xwrite uint32_t zero = 0;
   __xwrite uint32_t key_reset[4] = {0, 0, 0, 0};
   __addr40 __emem bucket_entry *victim_entry = 0;
@@ -265,6 +266,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   mem_incr32(&entry->packet_count);
 
   nodes_present = scalars->metadata__nodes_present;
+  cant_nodes    = scalars->metadata__nodes_present;
 
   // If this is the first packet for this flow, initialize the entry
   if (entry->packet_count == 1) {
@@ -279,7 +281,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
     mem_write_atomic(&request_meta, &entry->request_meta, sizeof(request_meta));
   }
 
-  for (k = 0; k < nodes_present && k < MAX_INT_NODES; k++) {
+  for (k = 0; k < cant_nodes && k < MAX_INT_NODES; k++) {
     node = (__lmem struct pif_header_ingress__node1_metadata *)node_metadata_ptrs[k];
 
     /* NOTE: We control C-events when there is more than one packet */
