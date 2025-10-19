@@ -26,8 +26,10 @@ typedef struct int_metric_info {
 /* 8-byte padding is needed to match NFP's compiler default padding rules */
 typedef struct bucket_entry {
     uint32_t key[4];
-    uint64_t first_packet_timestamp;
-    uint64_t last_update_timestamp;
+    uint32_t first_packet_ts_high;
+    uint32_t first_packet_ts_low;
+    uint32_t last_update_ts_high;
+    uint32_t last_update_ts_low;
     int_metric_info int_metric_info_value;
     uint32_t packet_count;
     uint32_t request_meta; // bits 0–15: request_id, bit 16: is_response, bits 17–31: reserved
@@ -54,7 +56,8 @@ typedef struct event_record {
     uint32_t value;
     uint32_t event_bitmap;
     uint32_t _padding1;
-    uint64_t event_timestamp;
+    uint32_t event_ts_high;
+    uint32_t event_ts_low;
     uint64_t _padding2;
 } event_record;
 

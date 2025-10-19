@@ -231,8 +231,8 @@ static void write_doc_ndjson(FILE *fp, const bucket_entry *e,
         ts_now, hostname,
         e->key[0], e->key[1], e->key[2], e->key[3],
         e->packet_count,
-        (unsigned long long)e->first_packet_timestamp,
-        (unsigned long long)e->last_update_timestamp,
+        ((uint64_t)e->first_packet_ts_high << 32) | e->first_packet_ts_low,
+        ((uint64_t)e->last_update_ts_high  << 32) | e->last_update_ts_low,
         e->request_meta,
         n
     );
