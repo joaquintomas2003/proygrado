@@ -10,6 +10,7 @@ INT_UDP_DST_PORT = 5000  # arbitrary INT UDP port
 ORIGINAL_PROTO = 6        # TCP
 INT_TYPE = 1              # 1 = INT-MD
 MAX_FRAME = 1500
+MAX_INT_NODES = 5
 
 # Bit: (Field, Length)
 INSTRUCTION_FIELDS = {
@@ -183,7 +184,8 @@ def inject_int(pkt, cfg, rng, params, int_udp_dst_port):
     else:
         eth = Ether(type=0x0800)
 
-    md_header = build_int_md_header(hop_ml, rhc=0, instruction_bitmap=instruction_bitmap)
+    rhc = MAX_INT_NODES - num_hops
+    md_header = build_int_md_header(hop_ml, rhc=rhc, instruction_bitmap=instruction_bitmap)
     metadata_stack = build_metadata_stack(hop_ids, instruction_bitmap, params, rng)
 
     # ----------------
