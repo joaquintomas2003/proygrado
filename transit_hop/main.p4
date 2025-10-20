@@ -251,12 +251,12 @@ control E(inout headers h, inout metadata m, inout standard_metadata_t sm) {
       h.node_metadata.node_id = ((ib & 0x8000) != 0) ? m.node_id : (bit<32>) 0;
 
       // word 1: hop_latency
-      h.node_metadata.hop_latency = ((ib & 0x2000) != 0) ? (bit<32>) intrinsic_metadata.ingress_global_timestamp - (bit<32>) intrinsic_metadata.egress_global_timestamp : (bit<32>) 0;
+      h.node_metadata.hop_latency = ((ib & 0x2000) != 0) ? (bit<32>) m.intrinsic_metadata.ingress_global_timestamp - (bit<32>) m.intrinsic_metadata.egress_global_timestamp : (bit<32>) 0;
 
       // word 2: queue_id (high 8) + queue_occupancy (low 24)
       if ((ib & 0x1000) != 0) {
           m.queue_id        = (bit<8>) 0;
-          m.queue_occupancy = (bit<24>) intrinsic_metadata.deq_qdepth;
+          m.queue_occupancy = (bit<24>) m.intrinsic_metadata.deq_qdepth;
       } else {
           m.queue_id        = (bit<8>) 0;
           m.queue_occupancy = (bit<24>) 0;
@@ -265,7 +265,7 @@ control E(inout headers h, inout metadata m, inout standard_metadata_t sm) {
       h.node_metadata.queue_occupancy = m.queue_occupancy;
 
       // word 3: egress interface TX
-      h.node_metadata.egress_interface_tx = ((ib & 0x0100) != 0) ? (bit<32>)intrinsic_metadata.deq_timedelta : (bit<32>)0;
+      h.node_metadata.egress_interface_tx = ((ib & 0x0100) != 0) ? (bit<32>)m.intrinsic_metadata.deq_timedelta : (bit<32>)0;
 
       // INT accounting
       h.int_header.remaining_hop_cnt = h.int_header.remaining_hop_cnt - 1;
