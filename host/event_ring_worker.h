@@ -10,7 +10,7 @@ typedef struct {
     int ring_index;
     struct nfp_cpp_area *area_ring;
     struct nfp_cpp_area *area_ring_meta;
-    int cpu_to_pin;
+    int debug_flag;
 } thread_arg_t;
 
 void *event_ring_worker(void *arg);

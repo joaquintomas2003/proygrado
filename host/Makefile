@@ -3,7 +3,7 @@ CFLAGS   := -w -I/opt/netronome/include/
 LDFLAGS  := -L/opt/netronome/lib/
 LDLIBS   := -lnfp -lz -pthread
 
-SRC      := host_reader.c event_ring_worker.c spooler.c
+SRC      := host_reader.c event_ring_worker.c spooler.c event_spooler.c
 OBJ      := $(SRC:.c=.o)
 TARGET   := host_reader
 

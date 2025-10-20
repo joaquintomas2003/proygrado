@@ -15,6 +15,7 @@
 #include "ring_defs.h"
 #include "event_ring_worker.h"
 #include "spooler.h"
+#include "event_spooler.h"
 
 volatile int stop = 0;
 int debug = 0;
@@ -40,6 +41,8 @@ int main(int argc, char *argv[]) {
     /* ---- Spooler startup (queue + spool thread) ---- */
     spooler_init();
     spooler_start();
+    event_spooler_init();
+    event_spooler_start();
 
     struct nfp_device *h_nfp = NULL;
     struct nfp_cpp *h_cpp = NULL;
@@ -122,6 +125,7 @@ int main(int argc, char *argv[]) {
         args[i].ring_index = i;
         args[i].area_ring = area_rings_I[i];
         args[i].area_ring_meta = area_ring_metas_I[i];
+        args[i].debug_flag = debug;
 
         if (pthread_create(&threads_ring_I[i], NULL, event_ring_worker, &args[i]) != 0) {
             perror("pthread_create failed");
