@@ -251,7 +251,7 @@ control E(inout headers h, inout metadata m, inout standard_metadata_t sm) {
       h.node_metadata.node_id = ((ib & 0x8000) != 0) ? m.node_id : (bit<32>) 0;
 
       // word 1: hop_latency
-      h.node_metadata.hop_latency = ((ib & 0x2000) != 0) ? (bit<32>) m.intrinsic_metadata.ingress_global_timestamp - (bit<32>) m.intrinsic_metadata.egress_global_timestamp : (bit<32>) 0;
+      h.node_metadata.hop_latency = ((ib & 0x2000) != 0) ? (bit<32>) m.intrinsic_metadata.ingress_global_timestamp - (bit<32>) m.intrinsic_metadata.current_global_timestamp : (bit<32>) 0;
 
       // word 2: queue_id (high 8) + queue_occupancy (low 24)
       if ((ib & 0x1000) != 0) {
