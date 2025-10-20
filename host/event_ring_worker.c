@@ -45,7 +45,7 @@ void *event_ring_worker(void *arg) {
                 return NULL;
             }
 
-            if (!event_spooler_enqueue(&current_ring_entry)) {
+            if (!event_spooler_enqueue(&current_ring_entry, ring)) {
                 /* If stop is set while waiting, break gracefully */
                 break;
             }

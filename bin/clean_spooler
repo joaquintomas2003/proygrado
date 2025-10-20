@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SPOOL_DIR="/var/spool/int"
+SPOOL_DIRS=("/var/spool/int" "/var/spool/event")
 
-echo "→ Cleaning $SPOOL_DIR ..."
+for DIR in "${SPOOL_DIRS[@]}"; do
+  echo "→ Cleaning $DIR ..."
 
-# Remove empty files
-find "$SPOOL_DIR" -type f -size 0 -print -delete
+  # Remove empty files
+  find "$DIR" -type f -size 0 -print -delete
 
-# Remove lingering .open files (Filebeat ignores them anyway)
-find "$SPOOL_DIR" -type f -name '*.open' -print -delete
+  # Remove lingering .open files (Filebeat ignores them anyway)
+  find "$DIR" -type f -name '*.open' -print -delete
 
-# Remove files older than 1 day (tweak as needed)
-# These should already have been ingested by Filebeat
-find "$SPOOL_DIR" -type f -name '*.ndjson' -mtime +1 -print -delete
+  # Remove files older than 1 day (already ingested by Filebeat)
+  # These should already have been ingested by Filebeat
+  find "$DIR" -type f -name '*.ndjson' -mtime +1 -print -delete
+done

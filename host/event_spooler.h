@@ -20,4 +20,4 @@ void event_spooler_start(void);
 void event_spooler_stop(void);
 
 /* Producer side API: enqueue a new event record */
-int event_spooler_enqueue(const event_record *e);
+int event_spooler_enqueue(const event_record *e, int ring_index);
