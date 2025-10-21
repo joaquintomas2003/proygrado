@@ -45,6 +45,7 @@
 #define POP_IDLE_TICK_MS  500u                    /* Wake to check age while idle */
 
 extern volatile int stop;
+uint64_t system_ts = 0;
 
 /* ---------------- Queue ---------------- */
 typedef struct {
@@ -54,7 +55,6 @@ typedef struct {
     pthread_cond_t  not_empty, not_full;
 } event_queue;
 
-// static event_queue g_q;
 
 /* ---------------- Spooler ---------------- */
 typedef struct {
@@ -68,8 +68,6 @@ typedef struct {
     uint64_t seq;
 } spooler_t;
 
-// static spooler_t g_spooler;
-// static pthread_t g_thread;
 
 typedef struct {
     event_queue q;
@@ -90,6 +88,18 @@ static void now_iso8601(char *out, size_t outlen) {
     struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);
     time_t secs = ts.tv_sec; struct tm tm; gmtime_r(&secs, &tm);
     int ms = (int)(ts.tv_nsec / 1000000);
+    snprintf(out, outlen, "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ",
+             tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+             tm.tm_hour, tm.tm_min, tm.tm_sec, ms);
+}
+
+static void ts_to_iso8601(uint64_t ts_ns, char *out, size_t outlen) {
+    if (!out || outlen == 0) return;
+    time_t secs = ts_ns / 1000000000ull;
+    long nsec   = ts_ns % 1000000000ull;
+    int ms      = (int)(nsec / 1000000);
+    struct tm tm;
+    gmtime_r(&secs, &tm);
     snprintf(out, outlen, "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ",
              tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
              tm.tm_hour, tm.tm_min, tm.tm_sec, ms);
@@ -204,6 +214,10 @@ static void write_doc_ndjson(FILE *fp,
                              size_t *docs_accum) {
 
     char ts_now[48]; now_iso8601(ts_now, sizeof ts_now);
+
+    uint64_t event_ts = (((uint64_t)e->event_ts_high << 32) | e->event_ts_low) + system_ts;
+    char event_ts_system[48];
+    ts_to_iso8601(event_ts, event_ts_system, sizeof event_ts_system);
     size_t wrote = 0;
     wrote += fprintf(fp,
         "{"
@@ -213,13 +227,13 @@ static void write_doc_ndjson(FILE *fp,
             "\"node_id\":%u,"
             "\"value\":%u,"
             "\"event_bitmap\":%u,"
-            "\"ts\":%llu"
+            "\"timestamp\":%s"
           "}}\n",
         ts_now, hostname,
         e->switch_id,
         e->value,
         e->event_bitmap,
-        ((uint64_t)e->event_ts_high << 32) | e->event_ts_low
+        event_ts_system
     );
     fflush(fp);
     *bytes_accum += wrote;
@@ -264,11 +278,11 @@ void event_spooler_init(void) {
         s->spooler.hostname[sizeof s->spooler.hostname - 1] = '\0';
         s->spooler.seq = 0;
     }
-        // q_init(&g_q, QUEUE_CAPACITY);
-        // if (gethostname(g_spooler.hostname, sizeof g_spooler.hostname) != 0)
-        //     strncpy(g_spooler.hostname, "unknown", sizeof g_spooler.hostname);
-        // g_spooler.hostname[sizeof g_spooler.hostname - 1] = '\0';
-        // g_spooler.seq = 0;
+    FILE *fp = popen("cat /home/smartlab/.local/share/p4_load_timestamp", "r");
+        if (fp) {
+            if (fscanf(fp, "%llu", &system_ts) != 1) system_ts = 0;
+            pclose(fp);
+        }
 }
 
 void event_spooler_start(void) {
@@ -278,10 +292,6 @@ void event_spooler_start(void) {
            exit(1);
        }
     }
-    // if (pthread_create(&g_thread, NULL, spooler_thread, NULL) != 0) {
-    //     perror("pthread_create spooler");
-    //     exit(1);
-    // }
 }
 
 void event_spooler_stop(void) {
