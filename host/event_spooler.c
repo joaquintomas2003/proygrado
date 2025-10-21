@@ -210,10 +210,10 @@ static void write_doc_ndjson(FILE *fp,
           "\"@timestamp\":\"%s\","
           "\"host\":{\"name\":\"%s\"},"
           "\"event\":{"
-            "\"switch_id\":%u,"
+            "\"node_id\":%u,"
             "\"value\":%u,"
             "\"event_bitmap\":%u,"
-            "\"event_ts\":%llu"
+            "\"ts\":%llu"
           "}}\n",
         ts_now, hostname,
         e->switch_id,

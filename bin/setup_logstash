@@ -155,6 +155,25 @@ filter {
     mutate {
       remove_field => ["[int][latest]", "[int][average]"]
     }
+  } else if [event][dataset] == "int.event" {
+    ruby {
+      code => '
+        bitmap = event.get("[event][event_bitmap]")
+
+        type = case bitmap
+               when (1 << 0) then "Switch Threshold"
+               when (1 << 1) then "Switch Change"
+               when (1 << 2) then "E2E Threshold"
+               when (1 << 3) then "E2E Change"
+               else "Unknown"
+               end
+
+        event.set("[event][event_type]", type)
+      '
+    }
+    mutate {
+      remove_field => ["[event][type]"]
+    }
   }
 }
 
