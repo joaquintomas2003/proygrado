@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ────────────────────────────────────────────────
+# Usage: ./bind-dpdk.sh vf0_0 [vf0_1 ...]
+# Example: ./bind-dpdk.sh vf0_0 vf0_2
+# ────────────────────────────────────────────────
+
+# Map interface names to PCI addresses
+declare -A VF_MAP=(
+  [vf0_0]="0000:01:08.0"
+  [vf0_1]="0000:01:08.1"
+  [vf0_2]="0000:01:08.2"
+  [vf0_3]="0000:01:08.3"
+)
+
+# Ensure at least one argument
+if [[ $# -lt 1 ]]; then
+  echo "Usage: $0 <vf0_0|vf0_1|vf0_2|vf0_3> [...]"
+  exit 1
+fi
+
+# Ensure vfio-pci module is loaded
+sudo modprobe vfio-pci
+
+# Process each interface
+for iface in "$@"; do
+  pci_addr="${VF_MAP[$iface]:-}"
+
+  if [[ -z "$pci_addr" ]]; then
+    echo "Unknown interface: $iface"
+    continue
+  fi
+
+  echo "→ Binding $iface ($pci_addr) to vfio-pci..."
+  sudo dpdk-devbind.py -b vfio-pci "$pci_addr"
+done
+
+# Show final status
+echo "Binding summary:"
+sudo dpdk-devbind.py -s
