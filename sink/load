@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+GREEN='\033[0;32m'
+NC='\033[0m' # No Color
+
+echo -e "${GREEN}Loading firmware${NC}"
+/home/smartlab/proygrado/bin/p4 design-load >/dev/null 2>&1
+export END_TIME=$(date +%s%N)
+echo -e "${GREEN}✅ Firmware loaded${NC}"
+echo "$END_TIME"
