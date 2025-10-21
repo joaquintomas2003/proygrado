@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ────────────────────────────────────────────────
+# Usage: ./unbind-dpdk.sh vf0_0 [vf0_1 ...]
+# Example: ./unbind-dpdk.sh vf0_0 vf0_1 vf0_2 vf0_3
+# ────────────────────────────────────────────────
+
+# Map logical VF names to PCI addresses
+declare -A VF_MAP=(
+  [vf0_0]="0000:01:08.0"
+  [vf0_1]="0000:01:08.1"
+  [vf0_2]="0000:01:08.2"
+  [vf0_3]="0000:01:08.3"
+)
+
+# Map logical VF names to desired MAC addresses
+declare -A MAC_MAP=(
+  [vf0_0]="00:15:4d:00:00:00"
+  [vf0_1]="00:15:4d:00:00:01"
+  [vf0_2]="00:15:4d:00:00:02"
+  [vf0_3]="00:15:4d:00:00:03"
+)
+
+# Ensure at least one argument
+if [[ $# -lt 1 ]]; then
+  echo "Usage: $0 <vf0_0|vf0_1|vf0_2|vf0_3> [...]"
+  exit 1
+fi
+
+# Load kernel driver
+sudo modprobe nfp
+
+# Unbind each interface from vfio-pci and rebind to nfp_netvf
+for iface in "$@"; do
+  pci_addr="${VF_MAP[$iface]:-}"
+  mac="${MAC_MAP[$iface]:-}"
+
+  if [[ -z "$pci_addr" ]]; then
+    echo "Unknown interface: $iface"
+    continue
+  fi
+
+  echo "→ Restoring $iface ($pci_addr) to nfp_netvf..."
+
+  # Unbind from vfio-pci
+  if [[ -e /sys/bus/pci/drivers/vfio-pci/$pci_addr ]]; then
+    echo "$pci_addr" | sudo tee /sys/bus/pci/drivers/vfio-pci/unbind >/dev/null
+  fi
+
+  # Bind back to nfp
+  if [[ -d /sys/bus/pci/drivers/nfp_netvf ]]; then
+    echo "$pci_addr" | sudo tee /sys/bus/pci/drivers/nfp_netvf/bind >/dev/null
+  fi
+
+  # Wait a bit for interface to appear
+  sleep 1
+
+  # Get new interface name automatically assigned by the kernel
+  new_if=$(ip -o link | grep "$mac" | awk -F': ' '{print $2}' || true)
+  if [[ -z "$new_if" ]]; then
+    echo "Could not detect interface for MAC $mac"
+    continue
+  fi
+
+  echo "→ Renaming $new_if → $iface"
+  sudo ip link set "$new_if" down
+  sudo ip link set "$new_if" name "$iface"
+  sudo ip link set "$iface" address "$mac"
+  sudo ip link set "$iface" up
+done
+
+echo "Restore complete!"
+ip -br link show | grep vf
