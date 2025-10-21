@@ -45,7 +45,7 @@
 #define POP_IDLE_TICK_MS  500u                    /* Wake to check age while idle */
 
 extern volatile int stop;
-uint64_t system_ts = 0;
+uint64_t system_ts_spooler = 0;
 
 /* ---------------- Queue ---------------- */
 typedef struct {
@@ -215,7 +215,7 @@ static void write_doc_ndjson(FILE *fp,
 
     char ts_now[48]; now_iso8601(ts_now, sizeof ts_now);
 
-    uint64_t event_ts = (((uint64_t)e->event_ts_high << 32) | e->event_ts_low) + system_ts;
+    uint64_t event_ts = (((uint64_t)e->event_ts_high << 32) | e->event_ts_low) + system_ts_spooler;
     char event_ts_system[48];
     ts_to_iso8601(event_ts, event_ts_system, sizeof event_ts_system);
     size_t wrote = 0;
@@ -227,7 +227,7 @@ static void write_doc_ndjson(FILE *fp,
             "\"node_id\":%u,"
             "\"value\":%u,"
             "\"event_bitmap\":%u,"
-            "\"timestamp\":%s"
+            "\"timestamp\":\"%s\""
           "}}\n",
         ts_now, hostname,
         e->switch_id,
@@ -280,7 +280,7 @@ void event_spooler_init(void) {
     }
     FILE *fp = popen("cat /home/smartlab/.local/share/p4_load_timestamp", "r");
         if (fp) {
-            if (fscanf(fp, "%llu", &system_ts) != 1) system_ts = 0;
+            if (fscanf(fp, "%llu", &system_ts_spooler) != 1) system_ts_spooler = 0;
             pclose(fp);
         }
 }
