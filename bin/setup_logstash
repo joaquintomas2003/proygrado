@@ -12,6 +12,7 @@ ES_CA_CERT="${ES_CA_CERT:-/etc/logstash/certs/http_ca.crt}"
 PIPELINE_ID="${PIPELINE_ID:-int-metrics}"
 PORT_BEATS="${PORT_BEATS:-5044}"
 HOPS_INDEX_PATTERN="${HOPS_INDEX_PATTERN:-int-metrics-%{+YYYY.MM.dd}}"
+EVENT_INDEX_PATTERN="${EVENT_INDEX_PATTERN:-int-event-%{+YYYY.MM.dd}}"
 NFP_INDEX_PATTERN="${NFP_INDEX_PATTERN:-nfp-logs-%{+YYYY.MM.dd}}"
 PIPELINE_WORKERS="${PIPELINE_WORKERS:-4}"
 PQ_BYTES="${PQ_BYTES:-4gb}"
@@ -154,6 +155,25 @@ filter {
     mutate {
       remove_field => ["[int][latest]", "[int][average]"]
     }
+  } else if [event][dataset] == "int.event" {
+    ruby {
+      code => '
+        bitmap = event.get("[event][event_bitmap]")
+
+        type = case bitmap
+               when (1 << 0) then "Switch Threshold"
+               when (1 << 1) then "Switch Change"
+               when (1 << 2) then "E2E Threshold"
+               when (1 << 3) then "E2E Change"
+               else "Unknown"
+               end
+
+        event.set("[event][event_type]", type)
+      '
+    }
+    mutate {
+      remove_field => ["[event][type]"]
+    }
   }
 }
 
@@ -166,6 +186,15 @@ output {
       ssl_enabled                 => true
       ssl_certificate_authorities => ["${ES_CA_CERT}"]
       index                       => "${HOPS_INDEX_PATTERN}"
+    }
+  } else if [event][dataset] == "int.event" {
+    elasticsearch {
+      hosts                       => ${ES_HOSTS_JSON}
+      user                        => "${ES_USER}"
+      password                    => "${ES_PASS}"
+      ssl_enabled                 => true
+      ssl_certificate_authorities => ["${ES_CA_CERT}"]
+      index                       => "${EVENT_INDEX_PATTERN}"
     }
   } else if [event][dataset] == "nfp.logs" {
     elasticsearch {

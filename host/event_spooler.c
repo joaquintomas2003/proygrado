@@ -1,7 +1,7 @@
-// spooler.c
+// event_spooler.c
 //
 // Spooler = lock-free-ish producer/consumer with a bounded queue.
-// Producers (your ring readers) call spooler_enqueue(bucket_entry*).
+// Producers (your ring readers) call event_spooler_enqueue(event_record*).
 // A single background thread pops entries and appends them as **one JSON
 // document per line** into a rolling ".ndjson.open" file, which is atomically
 // renamed to ".ndjson" on rotation/close. Filebeat tails only the closed files.
@@ -24,7 +24,7 @@
 //   - Age-based rotation now works even when idle (thread wakes periodically).
 //   - Age uses CLOCK_MONOTONIC to avoid NTP jumps affecting rotation.
 
-#include "spooler.h"
+#include "event_spooler.h"
 #include "ring_defs.h"
 
 #include <errno.h>
@@ -37,7 +37,7 @@
 #include <sys/stat.h>   // mkdir, stat
 #include <limits.h>     // PATH_MAX
 
-#define SPOOL_DIR         "/var/spool/int"
+#define SPOOL_DIR         "/var/spool/event"
 #define SEG_MAX_BYTES     (128u * 1024u * 1024u) /* 128 MB */
 #define SEG_MAX_DOCS      500000u
 #define SEG_MAX_AGE_MS    10000u                  /* 10s: avoids tiny segments */
@@ -48,13 +48,13 @@ extern volatile int stop;
 
 /* ---------------- Queue ---------------- */
 typedef struct {
-    bucket_entry *buf;
+    event_record *buf;
     size_t cap, head, tail, size;
     pthread_mutex_t mu;
     pthread_cond_t  not_empty, not_full;
-} bucket_queue;
+} event_queue;
 
-static bucket_queue g_q;
+// static event_queue g_q;
 
 /* ---------------- Spooler ---------------- */
 typedef struct {
@@ -68,8 +68,17 @@ typedef struct {
     uint64_t seq;
 } spooler_t;
 
-static spooler_t g_spooler;
-static pthread_t g_thread;
+// static spooler_t g_spooler;
+// static pthread_t g_thread;
+
+typedef struct {
+    event_queue q;
+    spooler_t spooler;
+    pthread_t thread;
+    int ring_index;
+} event_spooler_instance_t;
+
+static event_spooler_instance_t g_spoolers[NUM_RINGS];
 
 /* ---------------- Helpers ---------------- */
 static inline uint64_t now_ms_mono(void) {
@@ -86,8 +95,8 @@ static void now_iso8601(char *out, size_t outlen) {
              tm.tm_hour, tm.tm_min, tm.tm_sec, ms);
 }
 
-static void q_init(bucket_queue *q, size_t cap) {
-    q->buf = (bucket_entry*)calloc(cap, sizeof(bucket_entry));
+static void q_init(event_queue *q, size_t cap) {
+    q->buf = (event_record*)calloc(cap, sizeof(event_record));
     if (!q->buf) { perror("calloc queue"); exit(1); }
     q->cap = cap; q->head = q->tail = q->size = 0;
     pthread_mutex_init(&q->mu, NULL);
@@ -95,7 +104,7 @@ static void q_init(bucket_queue *q, size_t cap) {
     pthread_cond_init(&q->not_full, NULL);
 }
 
-static int q_push(bucket_queue *q, const bucket_entry *e) {
+static int q_push(event_queue *q, const event_record *e) {
     pthread_mutex_lock(&q->mu);
     while (q->size == q->cap && !stop)
         pthread_cond_wait(&q->not_full, &q->mu);
@@ -108,7 +117,7 @@ static int q_push(bucket_queue *q, const bucket_entry *e) {
 }
 
 /* Timed pop: returns 1 on item; 0 on (stop && drained); -1 on idle timeout */
-static int q_pop_timeout(bucket_queue *q, bucket_entry *out, uint64_t timeout_ms) {
+static int q_pop_timeout(event_queue *q, event_record *out, uint64_t timeout_ms) {
     struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);
     uint64_t add_ns = (timeout_ms % 1000ull) * 1000000ull + ts.tv_nsec;
     ts.tv_sec  += (time_t)(timeout_ms / 1000ull) + (time_t)(add_ns / 1000000000ull);
@@ -136,15 +145,15 @@ static int ensure_spool_dir(void) {
     return -1;
 }
 
-static void spooler_open(spooler_t *s) {
+static void spooler_open(spooler_t *s, int ring_index) {
     if (ensure_spool_dir() != 0) exit(1);
     char tsbuf[32];
     time_t t = time(NULL); struct tm tm; gmtime_r(&t, &tm);
     strftime(tsbuf, sizeof tsbuf, "%Y%m%dT%H%M%SZ", &tm);
 
     snprintf(s->path_open, sizeof s->path_open,
-             SPOOL_DIR "/host=%s.ts=%s.seq=%06llu.ndjson.open",
-             s->hostname, tsbuf, (unsigned long long)(s->seq++));
+             SPOOL_DIR "/host=%s.ring=%d.ts=%s.seq=%06llu.ndjson.open",
+             s->hostname, ring_index + 1, tsbuf, (unsigned long long)(s->seq++));
     /* strip ".open" for final */
     snprintf(s->path_ready, sizeof s->path_ready, "%.*s",
              (int)(strlen(s->path_open) - 5), s->path_open);
@@ -176,72 +185,42 @@ static void spooler_close(spooler_t *s) {
     }
 }
 
-static void spooler_rotate_if_needed(spooler_t *s) {
+static void spooler_rotate_if_needed(spooler_t *s, int ring_index) {
     uint64_t age = now_ms_mono() - s->opened_ms;
     /* Guard age with docs>0 to avoid churn during long idle periods */
     if (s->bytes >= SEG_MAX_BYTES ||
         s->docs  >= SEG_MAX_DOCS  ||
         (age >= SEG_MAX_AGE_MS && s->docs > 0)) {
         spooler_close(s);
-        spooler_open(s);
+        spooler_open(s, ring_index);
     }
-}
-
-/* Helper: write an array of int_metric_sample as compact JSON */
-static size_t write_int_samples_json(FILE *fp, const int_metric_sample *arr, uint32_t count) {
-    size_t n = 0;
-    if (count > MAX_INT_NODES) count = MAX_INT_NODES;
-    n += fputc('[', fp) != EOF ? 1 : 0;
-    for (uint32_t i = 0; i < count; i++) {
-        if (i) n += fputc(',', fp) != EOF ? 1 : 0;
-        n += fprintf(fp,
-            "{\"node_id\":%u,\"hop_latency\":%u,\"queue_occupancy\":%u,\"egress_interface_tx\":%u}",
-            arr[i].node_id,
-            arr[i].hop_latency,
-            arr[i].queue_occupancy,
-            arr[i].egress_interface_tx
-        );
-    }
-    n += fputc(']', fp) != EOF ? 1 : 0;
-    return n;
 }
 
 /* Write ONE NDJSON doc per call (no Bulk action line). */
-static void write_doc_ndjson(FILE *fp, const bucket_entry *e,
-                             const char *hostname, size_t *bytes_accum, size_t *docs_accum) {
-    char ts_now[48]; now_iso8601(ts_now, sizeof ts_now);
-    uint32_t n = e->int_metric_info_value.node_count;
-    if (n > MAX_INT_NODES) n = MAX_INT_NODES;
+static void write_doc_ndjson(FILE *fp,
+                             const event_record *e,
+                             const char *hostname,
+                             size_t *bytes_accum,
+                             size_t *docs_accum) {
 
+    char ts_now[48]; now_iso8601(ts_now, sizeof ts_now);
     size_t wrote = 0;
     wrote += fprintf(fp,
         "{"
           "\"@timestamp\":\"%s\","
           "\"host\":{\"name\":\"%s\"},"
-          "\"flow\":{"
-            "\"key\":[%u,%u,%u,%u],"
-            "\"packet_count\":%u,"
-            "\"first_packet_ts\":%llu,"
-            "\"last_update_ts\":%llu"
-          "},"
-          "\"int\":{"
-            "\"request_metadata\":%u,"
-            "\"node_count\":%u,"
-            "\"latest\":",
+          "\"event\":{"
+            "\"node_id\":%u,"
+            "\"value\":%u,"
+            "\"event_bitmap\":%u,"
+            "\"ts\":%llu"
+          "}}\n",
         ts_now, hostname,
-        e->key[0], e->key[1], e->key[2], e->key[3],
-        e->packet_count,
-        ((uint64_t)e->first_packet_ts_high << 32) | e->first_packet_ts_low,
-        ((uint64_t)e->last_update_ts_high  << 32) | e->last_update_ts_low,
-        e->request_meta,
-        n
+        e->switch_id,
+        e->value,
+        e->event_bitmap,
+        ((uint64_t)e->event_ts_high << 32) | e->event_ts_low
     );
-
-    wrote += write_int_samples_json(fp, e->int_metric_info_value.latest,  n);
-    wrote += fprintf(fp, ",\"average\":");
-    wrote += write_int_samples_json(fp, e->int_metric_info_value.average, n);
-    wrote += fprintf(fp, "}}\n");
-
     fflush(fp);
     *bytes_accum += wrote;
     *docs_accum  += 1;
@@ -249,52 +228,76 @@ static void write_doc_ndjson(FILE *fp, const bucket_entry *e,
 
 /* Spooler thread: drain until q_pop_timeout returns 0 (i.e., stop && empty) */
 static void* spooler_thread(void *arg) {
-    (void)arg;
-    spooler_open(&g_spooler);
+    event_spooler_instance_t *inst = arg;
+    spooler_open(&inst->spooler, inst->ring_index);
 
-    bucket_entry e;
+    event_record e;
     for (;;) {
-        int rc = q_pop_timeout(&g_q, &e, POP_IDLE_TICK_MS);
+        int rc = q_pop_timeout(&inst->q, &e, POP_IDLE_TICK_MS);
         if (rc == 1) {
-            write_doc_ndjson(g_spooler.fp, &e, g_spooler.hostname, &g_spooler.bytes, &g_spooler.docs);
-            spooler_rotate_if_needed(&g_spooler);
+            write_doc_ndjson(inst->spooler.fp,
+                             &e,
+                             inst->spooler.hostname,
+                             &inst->spooler.bytes,
+                             &inst->spooler.docs);
+            spooler_rotate_if_needed(&inst->spooler, inst->ring_index);
         } else if (rc == 0) {
             /* stop signaled AND queue drained */
             break;
         } else { /* rc == -1: idle timeout */
-            spooler_rotate_if_needed(&g_spooler); /* age-based rotation while idle */
+            spooler_rotate_if_needed(&inst->spooler, inst->ring_index); /* age-based rotation while idle */
         }
     }
 
-    spooler_close(&g_spooler);
+    spooler_close(&inst->spooler);
     return NULL;
 }
 
 /* ---------------- Public API ---------------- */
-void spooler_init(void) {
-    q_init(&g_q, QUEUE_CAPACITY);
-    if (gethostname(g_spooler.hostname, sizeof g_spooler.hostname) != 0)
-        strncpy(g_spooler.hostname, "unknown", sizeof g_spooler.hostname);
-    g_spooler.hostname[sizeof g_spooler.hostname - 1] = '\0';
-    g_spooler.seq = 0;
+void event_spooler_init(void) {
+    for (int i = 0; i < NUM_RINGS; i++) {
+        event_spooler_instance_t *s = &g_spoolers[i];
+        q_init(&s->q, QUEUE_CAPACITY);
+        s->ring_index = i;
+        if (gethostname(s->spooler.hostname, sizeof s->spooler.hostname) != 0)
+            strncpy(s->spooler.hostname, "unknown", sizeof s->spooler.hostname);
+        s->spooler.hostname[sizeof s->spooler.hostname - 1] = '\0';
+        s->spooler.seq = 0;
+    }
+        // q_init(&g_q, QUEUE_CAPACITY);
+        // if (gethostname(g_spooler.hostname, sizeof g_spooler.hostname) != 0)
+        //     strncpy(g_spooler.hostname, "unknown", sizeof g_spooler.hostname);
+        // g_spooler.hostname[sizeof g_spooler.hostname - 1] = '\0';
+        // g_spooler.seq = 0;
 }
 
-void spooler_start(void) {
-    if (pthread_create(&g_thread, NULL, spooler_thread, NULL) != 0) {
-        perror("pthread_create spooler");
-        exit(1);
+void event_spooler_start(void) {
+    for (int i = 0; i < NUM_RINGS; i++) {
+       if (pthread_create(&g_spoolers[i].thread, NULL, spooler_thread, &g_spoolers[i]) != 0) {
+           perror("pthread_create spooler");
+           exit(1);
+       }
+    }
+    // if (pthread_create(&g_thread, NULL, spooler_thread, NULL) != 0) {
+    //     perror("pthread_create spooler");
+    //     exit(1);
+    // }
+}
+
+void event_spooler_stop(void) {
+    /* Wake any waiters so the thread can observe 'stop' and drain/exit. */
+
+    for (int i = 0; i < NUM_RINGS; i++) {
+        pthread_mutex_lock(&g_spoolers[i].q.mu);
+        pthread_cond_broadcast(&g_spoolers[i].q.not_empty);
+        pthread_cond_broadcast(&g_spoolers[i].q.not_full);
+        pthread_mutex_unlock(&g_spoolers[i].q.mu);
+    }
+    for (int i = 0; i < NUM_RINGS; i++) {
+        pthread_join(g_spoolers[i].thread, NULL);
     }
 }
 
-void spooler_stop(void) {
-    /* Wake any waiters so the thread can observe 'stop' and drain/exit. */
-    pthread_mutex_lock(&g_q.mu);
-    pthread_cond_broadcast(&g_q.not_empty);
-    pthread_cond_broadcast(&g_q.not_full);
-    pthread_mutex_unlock(&g_q.mu);
-    pthread_join(g_thread, NULL);
-}
-
-int spooler_enqueue(const bucket_entry *e) {
-    return q_push(&g_q, e);
+int event_spooler_enqueue(const event_record *e, int ring_index) {
+    return q_push(&g_spoolers[ring_index].q, e);
 }

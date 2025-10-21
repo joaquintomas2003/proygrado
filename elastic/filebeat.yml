@@ -28,6 +28,23 @@ filebeat.inputs:
       event.dataset: int.metrics
     fields_under_root: true
 
+  - type: filestream
+    id: "int-event"
+    enabled: true
+    paths:
+      - /var/spool/event/*.ndjson
+    exclude_files: ['\.open$']
+    parsers:
+      - ndjson:
+          add_error_key: true
+          target: ""
+    prospector.scanner.fingerprint.length: 128
+    prospector.scanner.fingerprint.offset: 0
+    fields:
+      service: event
+      event.dataset: int.event
+    fields_under_root: true
+
 output.logstash:
   hosts: ["localhost:5044"]
   ssl.enabled: false

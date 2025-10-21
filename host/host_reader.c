@@ -15,6 +15,7 @@
 #include "ring_defs.h"
 #include "event_ring_worker.h"
 #include "spooler.h"
+#include "event_spooler.h"
 
 volatile int stop = 0;
 int debug = 0;
@@ -40,6 +41,8 @@ int main(int argc, char *argv[]) {
     /* ---- Spooler startup (queue + spool thread) ---- */
     spooler_init();
     spooler_start();
+    event_spooler_init();
+    event_spooler_start();
 
     struct nfp_device *h_nfp = NULL;
     struct nfp_cpp *h_cpp = NULL;
@@ -122,6 +125,7 @@ int main(int argc, char *argv[]) {
         args[i].ring_index = i;
         args[i].area_ring = area_rings_I[i];
         args[i].area_ring_meta = area_ring_metas_I[i];
+        args[i].debug_flag = debug;
 
         if (pthread_create(&threads_ring_I[i], NULL, event_ring_worker, &args[i]) != 0) {
             perror("pthread_create failed");
@@ -173,13 +177,51 @@ int main(int argc, char *argv[]) {
                 }
 
                 if (debug) {
-                    printf("  Entry[%u] Key Flow: [%u, %u, %u, %u]  packets=%u\n",
-                        rp,
+                    printf("\n================ BUCKET ENTRY [%u] ================\n", rp);
+
+                    printf("Key Flow: [%u, %u, %u, %u]\n",
                         current_ring_entry.key[0],
                         current_ring_entry.key[1],
                         current_ring_entry.key[2],
-                        current_ring_entry.key[3],
-                        current_ring_entry.packet_count);
+                        current_ring_entry.key[3]);
+
+                    printf("First Packet Timestamp: %lu ns\n",
+                        ((uint64_t)current_ring_entry.first_packet_ts_high << 32) | current_ring_entry.first_packet_ts_low);
+
+                    printf("Last Update Timestamp : %lu ns\n",
+                        ((uint64_t)current_ring_entry.last_update_ts_high << 32)  | current_ring_entry.last_update_ts_low);
+
+                    printf("Packet Count          : %u\n", current_ring_entry.packet_count);
+
+                    // uint16_t request_id = current_ring_entry.request_meta & 0xFFFF;
+                    // uint8_t  is_response = (current_ring_entry.request_meta >> 16) & 0x1;
+
+                    // printf("Request Meta          : 0x%08X (request_id=%u, is_response=%u)\n",
+                    //     current_ring_entry.request_meta, request_id, is_response);
+
+                    printf("Node Count            : %u\n", current_ring_entry.int_metric_info_value.node_count);
+
+                    printf("\n-- Latest Metrics --\n");
+                    for (uint32_t n = 0; n < current_ring_entry.int_metric_info_value.node_count; n++) {
+                        printf("  Node[%u]: id=%u, hop_latency=%u, queue_occupancy=%u, egress_tx=%u\n",
+                            n,
+                            current_ring_entry.int_metric_info_value.latest[n].node_id,
+                            current_ring_entry.int_metric_info_value.latest[n].hop_latency,
+                            current_ring_entry.int_metric_info_value.latest[n].queue_occupancy,
+                            current_ring_entry.int_metric_info_value.latest[n].egress_interface_tx);
+                    }
+
+                    printf("\n-- Average Metrics --\n");
+                    for (uint32_t n = 0; n < current_ring_entry.int_metric_info_value.node_count; n++) {
+                        printf("  Node[%u]: id=%u, hop_latency=%u, queue_occupancy=%u, egress_tx=%u\n",
+                            n,
+                            current_ring_entry.int_metric_info_value.average[n].node_id,
+                            current_ring_entry.int_metric_info_value.average[n].hop_latency,
+                            current_ring_entry.int_metric_info_value.average[n].queue_occupancy,
+                            current_ring_entry.int_metric_info_value.average[n].egress_interface_tx);
+                    }
+
+                    printf("====================================================\n\n");
                 }
 
                 rp = (rp + 1) & (RING_SIZE - 1);
