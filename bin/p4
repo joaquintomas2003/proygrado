@@ -103,6 +103,11 @@ case "$COMMAND" in
   design-load)
     echo -e "${GREEN}Loading firmware from $FIRMWARE_PATH...${NC}"
     /opt/netronome/p4/bin/rtecli -r "$RTE_HOST" -p "$RTE_PORT" -d "$DEVICE_ID" design-load -f "$FIRMWARE_PATH" -p "$PIF_JSON_PATH"
+    TIMESTAMP_FILE="$HOME/.local/share/p4_load_timestamp"
+    mkdir -p "$(dirname "$TIMESTAMP_FILE")"
+    SYSTEM_TS=$(date +%s%N)
+    echo "$SYSTEM_TS" > "$TIMESTAMP_FILE"
+    chmod 644 "$TIMESTAMP_FILE"
     echo -e "${GREEN}✅ Firmware loaded${NC}"
     ;;
 
