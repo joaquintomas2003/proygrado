@@ -549,6 +549,7 @@ control MyIngress(inout headers hdr,
       if (hdr.intl4_shim.isValid()) {
         if (hdr.app_metadata.isValid()){
           save_in_hash();
+          standard_metadata.egress_spec = 769;
         }
       }
     }
