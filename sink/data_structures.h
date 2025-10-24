@@ -1,6 +1,6 @@
 #include <stdint.h>
 
-#define FLOWCACHE_ROWS (1 << 10)
+#define FLOWCACHE_ROWS (1 << 18)
 #define BUCKET_SIZE 12
 #define MAX_INT_NODES 5
 #define IP_PROTO_UDP 0x11
@@ -114,7 +114,7 @@ __export __emem ring_meta ring_G[NUM_RINGS];
 __export __emem event_ring_list ring_buffer_I[NUM_RINGS];
 __export __emem ring_meta ring_I[NUM_RINGS];
 
-volatile __emem __export uint32_t global_semaphores[FLOWCACHE_ROWS] = {x1024};
+volatile __emem __export uint32_t global_semaphores[FLOWCACHE_ROWS] = {x262144};
 volatile __emem __export uint32_t ring_buffer_sem_G[NUM_RINGS]      = {x8};
 volatile __emem __export uint32_t ring_buffer_sem_I[NUM_RINGS]      = {x8};
 
