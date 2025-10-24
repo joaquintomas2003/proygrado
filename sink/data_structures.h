@@ -24,9 +24,9 @@
 #define x8192 x4096, x4096          //2^13
 #define x16384 x8192, x8192         //2^14
 #define x32768 x16384, x16384       //2^15
-#define x655356 x32768, x32768      //2^16
-#define x1310712 x655356, x655356   //2^17
-#define x2621424 x1310712, x1310712 //2^18
+#define x65536 x32768, x32768       //2^16
+#define x131072 x65536, x65536      //2^17
+#define x262144 x131072, x131072    //2^18
 
 /* Event type bits */
 #define EVENT_T_SWITCH  (1u << 0)
