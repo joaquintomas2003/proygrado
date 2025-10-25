@@ -80,20 +80,6 @@ static __inline int _push_event_to_RI(uint32_t ring_index,
   return 0;
 }
 
-// Writes a sample from node metadata to a given destination in the entry
-static __inline void _write_node_sample(__xwrite int_metric_sample *sample,
-                                        __addr40 void *dest,
-                                        void *node_metadata_ptr) {
-  uint32_t *base = (uint32_t *)node_metadata_ptr;
-
-  sample->node_id             = base[0]; // node_id
-  sample->hop_latency         = base[1]; // hop_latency
-  sample->queue_occupancy     = base[2]; // queue_occupancy
-  sample->egress_interface_tx = base[3]; // egress_interface_tx
-
-  mem_write_atomic(sample, dest, sizeof(*sample));
-}
-
 static __inline int _absdiff(uint32_t a, uint32_t b) {
   return (a > b) ? (a - b) : (b - a);
 }
@@ -101,40 +87,42 @@ static __inline int _absdiff(uint32_t a, uint32_t b) {
 int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_data) {
   // Declare the bucket entry variables
   __addr40 __emem bucket_entry *entry = 0;
-  __xrw int_metric_sample avg_sample;
-  __xrw uint32_t nodes_present;
-  __xrw uint64_t update_timestamp;
-  __xrw uint32_t request_meta;
-  __xwrite int_metric_sample sample;
-  int i, k;
-  uint32_t hash_key[4];
-  void *node_metadata_ptrs[MAX_INT_NODES];
-  volatile uint32_t hash_value;
+  __addr40 __emem bucket_entry *victim_entry = 0;
+  __addr40 __emem bucket_entry *ring_entry = 0;
 
-  __xrw uint64_t timestamp;
-  uint64_t min_ts = 0xFFFFFFFFFFFFFFFFULL;
-  uint64_t aged_ts;
-  uint64_t event_timestamp;
+  __xrw    ring_meta ring_meta_read;
+  __xrw    int_metric_sample avg_sample;
+
+  __xread  int_metric_sample prev_latest;
+
+  __xwrite int_metric_sample sample;
+  __xwrite uint32_t key_reset[4] = {0, 0, 0, 0};
+  __xwrite uint32_t key[4];
+  __xwrite uint32_t packet_count_lru;
+  __xwrite uint32_t request_meta_lru;
+  __xwrite uint32_t nodes_present;
+  __xwrite uint32_t request_meta;
+  __xwrite uint64_t first_packet_timestamp_lru;
+  __xwrite uint64_t timestamp;
+  __xwrite uint64_t update_timestamp;
+
+  int      i, k;
+  uint32_t hash_key[4];
+  uint32_t hash_value;
   uint32_t evict_selected = 0;
   uint32_t wp, rp, f;
   uint32_t ring_index;
   uint32_t cant_nodes;
-  __xwrite uint32_t zero = 0;
-  __xwrite uint32_t key_reset[4] = {0, 0, 0, 0};
-  __addr40 __emem bucket_entry *victim_entry = 0;
-  __addr40 __emem bucket_entry *ring_entry = 0;
-  __addr40 __emem ring_meta *ring_info;
-  __xrw    ring_meta ring_meta_read;
-  __xwrite uint32_t key_lru[4];
-  __xwrite uint32_t packet_count_lru;
-  __xwrite uint64_t first_packet_timestamp_lru;
-  __xwrite uint32_t request_meta_lru;
-
-  __xrw int_metric_sample prev_latest;
   uint32_t e2e_prev_hop = 0, e2e_curr_hop = 0;
   uint32_t absdiff;
   uint32_t metric_id;
   uint32_t hop_latency;
+
+  uint64_t min_ts = 0xFFFFFFFFFFFFFFFFULL;
+  uint64_t aged_ts;
+  uint64_t event_timestamp;
+
+  void     *node_metadata_ptrs[MAX_INT_NODES];
 
   // Declare the metadata variables
   __lmem struct pif_header_scalars *scalars;
@@ -189,9 +177,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   // If we reached the end of the bucket without finding a match
   if (i == BUCKET_SIZE || evict_selected) {
     semaphore_down(&ring_buffer_sem_G[ring_index]);
-      ring_info = &ring_G[ring_index];
-
-      mem_read_atomic(&ring_meta_read, ring_info, sizeof(ring_meta_read));
+      mem_read_atomic(&ring_meta_read, &ring_G[ring_index], sizeof(ring_meta_read));
       wp = ring_meta_read.write_pointer;
       rp = ring_meta_read.read_pointer;
       f  = ring_meta_read.full;
@@ -201,16 +187,16 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
         cant_nodes    = victim_entry->int_metric_info_value.node_count;
         ring_entry    = &ring_buffer_G[ring_index].entry[wp];
 
-        key_lru[0] = victim_entry->key[0];
-        key_lru[1] = victim_entry->key[1];
-        key_lru[2] = victim_entry->key[2];
-        key_lru[3] = victim_entry->key[3];
+        key[0] = victim_entry->key[0];
+        key[1] = victim_entry->key[1];
+        key[2] = victim_entry->key[2];
+        key[3] = victim_entry->key[3];
 
         packet_count_lru           = victim_entry->packet_count;
         first_packet_timestamp_lru = victim_entry->first_packet_timestamp;
         request_meta_lru           = victim_entry->request_meta;
 
-        mem_write_atomic(key_lru, &ring_entry->key, sizeof(key_lru));
+        mem_write_atomic(key, &ring_entry->key, sizeof(key));
         mem_write_atomic(&packet_count_lru, &ring_entry->packet_count, sizeof(packet_count_lru));
         mem_write_atomic(&first_packet_timestamp_lru, &ring_entry->first_packet_timestamp, sizeof(first_packet_timestamp_lru));
         mem_write_atomic(&timestamp, &ring_entry->last_update_timestamp, sizeof(timestamp));
@@ -231,7 +217,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
             f = 1;
         }
         /* Free the bucket on the hash table */
-        mem_write_atomic(&zero, &victim_entry->packet_count, sizeof(zero));
+        mem_write_atomic(&key_reset[0], &victim_entry->packet_count, sizeof(uint32_t));
         mem_write_atomic(&key_reset, &victim_entry->key, sizeof(key_reset));
         /* We were on the last bucket, now we are on the free'd bucket*/
         entry = victim_entry;
@@ -242,7 +228,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
       ring_meta_read.write_pointer = wp;
       ring_meta_read.full          = f;
       ring_meta_read.read_pointer  = rp;
-      mem_write_atomic(&ring_meta_read, ring_info, sizeof(ring_meta_read));
+      mem_write_atomic(&ring_meta_read, &ring_G[ring_index], sizeof(ring_meta_read));
     semaphore_up(&ring_buffer_sem_G[ring_index]);
   }
 
@@ -266,8 +252,8 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
 
   // If this is the first packet for this flow, initialize the entry
   if (entry->packet_count == 1) {
-    __xwrite uint32_t key_wr[4] = {hash_key[0], hash_key[1], hash_key[2], hash_key[3]};
-    mem_write_atomic(key_wr, entry->key, sizeof(key_wr));
+    key[0] = hash_key[0]; key[1] = hash_key[1]; key[2] = hash_key[2]; key[3] = hash_key[3];
+    mem_write_atomic(key, entry->key, sizeof(key));
     mem_write_atomic(&nodes_present, &entry->int_metric_info_value.node_count, sizeof(nodes_present));
 
     // Set the first packet timestamp
