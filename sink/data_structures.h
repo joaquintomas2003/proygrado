@@ -1,6 +1,6 @@
 #include <stdint.h>
 
-#define FLOWCACHE_ROWS (1 << 10)
+#define FLOWCACHE_ROWS (1 << 18)
 #define BUCKET_SIZE 12
 #define MAX_INT_NODES 5
 #define IP_PROTO_UDP 0x11
@@ -12,21 +12,6 @@
 #define x2 x1, x1                   //2^1
 #define x4 x2, x2                   //2^2
 #define x8 x4, x4                   //2^3
-#define x16 x8, x8                  //2^4
-#define x32 x16, x16                //2^5
-#define x64 x32, x32                //2^6
-#define x128 x64, x64               //2^7
-#define x256 x128, x128             //2^8
-#define x512 x256, x256             //2^9
-#define x1024 x512, x512            //2^10
-#define x2048 x1024, x1024          //2^11
-#define x4096 x2048, x2048          //2^12
-#define x8192 x4096, x4096          //2^13
-#define x16384 x8192, x8192         //2^14
-#define x32768 x16384, x16384       //2^15
-#define x655356 x32768, x32768      //2^16
-#define x1310712 x655356, x655356   //2^17
-#define x2621424 x1310712, x1310712 //2^18
 
 /* Event type bits */
 #define EVENT_T_SWITCH  (1u << 0)
@@ -114,9 +99,9 @@ __export __emem ring_meta ring_G[NUM_RINGS];
 __export __emem event_ring_list ring_buffer_I[NUM_RINGS];
 __export __emem ring_meta ring_I[NUM_RINGS];
 
-volatile __emem __export uint32_t global_semaphores[FLOWCACHE_ROWS] = {x1024};
-volatile __emem __export uint32_t ring_buffer_sem_G[NUM_RINGS]      = {x8};
-volatile __emem __export uint32_t ring_buffer_sem_I[NUM_RINGS]      = {x8};
+volatile __emem __export uint32_t global_semaphores[FLOWCACHE_ROWS];
+volatile __emem __export uint32_t ring_buffer_sem_G[NUM_RINGS] = {x8};
+volatile __emem __export uint32_t ring_buffer_sem_I[NUM_RINGS] = {x8};
 
 static __inline void semaphore_down(volatile __declspec(mem addr40) void * addr) {
   unsigned int addr_hi, addr_lo;

@@ -198,6 +198,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
 
       if (f == 0) {
         nodes_present = victim_entry->int_metric_info_value.node_count;
+        cant_nodes    = victim_entry->int_metric_info_value.node_count;
         ring_entry    = &ring_buffer_G[ring_index].entry[wp];
 
         key_lru[0] = victim_entry->key[0];
@@ -218,17 +219,11 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
 
         mem_write_atomic(&nodes_present, &ring_entry->int_metric_info_value.node_count, sizeof(nodes_present));
 
-        for (k = 0; k < nodes_present && k < MAX_INT_NODES; k++) {
-          sample.node_id             = victim_entry->int_metric_info_value.latest[k].node_id;
-          sample.hop_latency         = victim_entry->int_metric_info_value.latest[k].hop_latency;
-          sample.queue_occupancy     = victim_entry->int_metric_info_value.latest[k].queue_occupancy;
-          sample.egress_interface_tx = victim_entry->int_metric_info_value.latest[k].egress_interface_tx;
+        for (k = 0; k < cant_nodes && k < MAX_INT_NODES; k++) {
+          sample = victim_entry->int_metric_info_value.latest[k];
           mem_write_atomic(&sample, &ring_entry->int_metric_info_value.latest[k], sizeof(sample));
 
-          sample.node_id             = victim_entry->int_metric_info_value.average[k].node_id;
-          sample.hop_latency         = victim_entry->int_metric_info_value.average[k].hop_latency;
-          sample.queue_occupancy     = victim_entry->int_metric_info_value.average[k].queue_occupancy;
-          sample.egress_interface_tx = victim_entry->int_metric_info_value.average[k].egress_interface_tx;
+          sample = victim_entry->int_metric_info_value.average[k];
           mem_write_atomic(&sample, &ring_entry->int_metric_info_value.average[k], sizeof(sample));
         }
         wp = (wp + 1) & (RING_SIZE - 1);

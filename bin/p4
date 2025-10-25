@@ -7,6 +7,15 @@ shift || true
 
 CWD="$(pwd)"
 
+# Extract FLOWCACHE_ROWS value from data_structures.h
+HEADER_FILE="data_structures.h"
+if [ -f "$HEADER_FILE" ]; then
+  FLOWCACHE_POW=$(grep -Po '(?<=#define FLOWCACHE_ROWS \(1 << )\d+' "$HEADER_FILE" || echo 0)
+  FLOWCACHE_ROWS=$(((2**FLOWCACHE_POW)*4))
+else
+  FLOWCACHE_ROWS=0
+fi
+
 # Allow overriding output paths via environment variables
 FIRMWARE_PATH="${FIRMWARE_PATH:-$CWD/out/firmware.nffw}"
 PIF_JSON_PATH="${PIF_JSON_PATH:-$CWD/pifout/pif_design.json}"
@@ -109,6 +118,9 @@ case "$COMMAND" in
     echo "$SYSTEM_TS" > "$TIMESTAMP_FILE"
     chmod 644 "$TIMESTAMP_FILE"
     echo -e "${GREEN}✅ Firmware loaded${NC}"
+    echo -e "${GREEN}Initializing semaphore...${NC}"
+    sudo /opt/netronome/bin/nfp-rtsym --len=$FLOWCACHE_ROWS _global_semaphores 1
+    echo -e "${GREEN}✅ Semaphore initialized${NC}"
     ;;
 
   config-load)
