@@ -47,6 +47,7 @@ function replay(queue, file, iterations, sleepTime)
 				totalBytes = totalBytes + bufs[j]:getSize()
 			end
 			totalPkts = totalPkts + n
+      print("Replayed packets: ", totalPkts)
 
 			queue:sendN(bufs, n)
 		end
