@@ -19,7 +19,6 @@ function master(args)
 	local dev = device.config{port = args.dev, txQueues = 1}
 	device.waitForLinks()
 	local queue = dev:getTxQueue(0)
-	-- ⚠️ Don't start MoonGen's internal stats task -> suppresses TX: 0.00 Mpps spam
 	local replay = mg.startTask("replay", queue, args.file, args.iterations, args.flush_seconds)
 	replay:wait()
 end
