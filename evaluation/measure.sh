@@ -44,26 +44,30 @@ echo "================================================="
 # ---- 6. Compare PPS between sender and receiver ----
 echo "[INFO] Comparing sender vs receiver rates ..."
 
-# Extract Mpps from MoonGen output
-MOONGEN_MPPS=$(grep -E "Average rate" moongen_output.log | tail -n1 | awk '{print $7}')
-MOONGEN_Mbps=$(grep -E "Average rate" moongen_output.log | tail -n1 | awk '{print $9}')
+# Remove any color escape codes from MoonGen output before parsing
+MOONGEN_CLEAN=$(sed 's/\x1b\[[0-9;]*m//g' moongen_output.log)
 
-# Extract receiver rate (packets/s) from capinfos
-RECV_PPS=$(echo "$CAPINFOS_OUTPUT" | grep "Average packet rate" | awk '{print $5}')
-RECV_UNIT=$(echo "$CAPINFOS_OUTPUT" | grep "Average packet rate" | awk '{print $6}')
+# Extract Mpps and Mbps from MoonGen
+MOONGEN_MPPS=$(echo "$MOONGEN_CLEAN" | awk '/Average rate:/ {print $(NF-3)}' | tail -n1)
+MOONGEN_Mbps=$(echo "$MOONGEN_CLEAN" | awk '/Average rate:/ {print $NF}' | tail -n1)
 
-# Normalize receiver rate
+# Extract receiver packet rate (capinfos output)
+RECV_PPS=$(echo "$CAPINFOS_OUTPUT" | awk '/Average packet rate:/ {print $5}')
+RECV_UNIT=$(echo "$CAPINFOS_OUTPUT" | awk '/Average packet rate:/ {print $6}')
+
+# Normalize receiver rate to Mpps
 if [[ "$RECV_UNIT" == "kpackets/s" ]]; then
-  RECV_MPPS=$(awk "BEGIN {print $RECV_PPS / 1000}")
+  RECV_MPPS=$(awk -v p="$RECV_PPS" 'BEGIN {printf "%.3f", p / 1000}')
 else
-  RECV_MPPS=$RECV_PPS
+  RECV_MPPS=$(awk -v p="$RECV_PPS" 'BEGIN {printf "%.3f", p}')
 fi
 
 echo "================ RATE COMPARISON ================"
-echo "Sender (MoonGen): ${MOONGEN_MPPS:-N/A} Mpps (${MOONGEN_Mbps:-N/A} Mbps)"
-echo "Receiver (tcpdump): ${RECV_MPPS:-N/A} Mpps"
-if [[ -n "${MOONGEN_MPPS:-}" && -n "${RECV_MPPS:-}" ]]; then
-  LOSS_PCT=$(awk "BEGIN {print (1 - $RECV_MPPS / $MOONGEN_MPPS) * 100}")
-  echo "Estimated packet loss: ${LOSS_PCT}%"
+printf "Sender (MoonGen): %.3f Mpps, %.3f Mbps\n" "${MOONGEN_MPPS:-0}" "${MOONGEN_Mbps:-0}"
+printf "Receiver (tcpdump): %.3f Mpps\n" "${RECV_MPPS:-0}"
+
+if [[ -n "${MOONGEN_MPPS:-}" && -n "${RECV_MPPS:-}" && $(echo "$MOONGEN_MPPS > 0" | bc) -eq 1 ]]; then
+  LOSS_PCT=$(awk -v s="$MOONGEN_MPPS" -v r="$RECV_MPPS" 'BEGIN {printf "%.2f", (1 - r/s) * 100}')
+  printf "Estimated packet loss: %s%%\n" "$LOSS_PCT"
 fi
 echo "================================================="
