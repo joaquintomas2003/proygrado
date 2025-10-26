@@ -14,7 +14,8 @@ ITERATIONS=100                                # how many times to replay
 
 # ---- 1. Start tcpdump capture ----
 echo "[INFO] Starting tcpdump capture on $IFACE_RX ..."
-sudo tcpdump -n udp -i "$IFACE_RX" -B 2097151 -w "$PCAP_OUT_PATH" &
+sudo timeout --preserve-status --signal SIGINT 20s \
+  tcpdump -n udp -i "$IFACE_RX" -B 2097151 -w "$PCAP_OUT_PATH" &
 TCPDUMP_PID=$!
 sleep 2                                       # give tcpdump a moment to start
 
