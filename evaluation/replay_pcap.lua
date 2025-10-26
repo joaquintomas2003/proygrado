@@ -1,17 +1,16 @@
--- Replay a pcap file at line rate (100 times), computing PPS and Mbps
+-- Replay a pcap file at line rate, 100 times, with software-based stats.
 
 local mg      = require "moongen"
 local device  = require "device"
 local memory  = require "memory"
-local stats   = require "stats"
 local log     = require "log"
 local pcap    = require "pcap"
 
 function configure(parser)
 	parser:argument("dev", "Device to use."):args(1):convert(tonumber)
 	parser:argument("file", "Pcap file to replay."):args(1)
-	parser:option("-n --iterations", "Number of times to replay the file."):default(100):convert(tonumber)
-	parser:option("-s --sleep-time", "Seconds to wait for TX queues to flush."):default(5):convert(tonumber)
+	parser:option("-n --iterations", "Number of replays."):default(100):convert(tonumber)
+	parser:option("-s --flush-seconds", "Seconds to wait after sending to flush TX queues."):default(5):convert(tonumber)
 	local args = parser:parse()
 	return args
 end
@@ -20,48 +19,54 @@ function master(args)
 	local dev = device.config{port = args.dev, txQueues = 1}
 	device.waitForLinks()
 	local queue = dev:getTxQueue(0)
-	stats.startStatsTask{txDevices = {dev}}
-	local task = mg.startTask("replay", queue, args.file, args.iterations, args.sleep_time)
-	task:wait()
+	-- ⚠️ Don't start MoonGen's internal stats task -> suppresses TX: 0.00 Mpps spam
+	local replay = mg.startTask("replay", queue, args.file, args.iterations, args.flush_seconds)
+	replay:wait()
 end
 
-function replay(queue, file, iterations, sleepTime)
+function replay(queue, file, iterations, flushSeconds)
 	local mempool = memory:createMemPool(4096)
 	local bufs = mempool:bufArray()
-	local totalPkts = 0
-	local totalBytes = 0
+	local totalPkts, totalBytes = 0, 0
 
 	local pcapFile = pcap:newReader(file)
-
-	local t0 = mg.getTime()
+	local tStart = mg.getTime()
+	local lastTime, lastPkts = tStart, 0
 
 	for i = 1, iterations do
 		while mg.running() do
 			local n = pcapFile:read(bufs)
-			if n == 0 then
-				break
-			end
+			if n == 0 then break end
 
-			-- Sum total bytes for Mbps computation
 			for j = 1, n do
 				totalBytes = totalBytes + bufs[j]:getSize()
 			end
 			totalPkts = totalPkts + n
-      print("Replayed packets: ", totalPkts)
-
 			queue:sendN(bufs, n)
-		end
 
+			-- periodic software stats every second
+			local now = mg.getTime()
+			if now - lastTime >= 1 then
+				local deltaPkts = totalPkts - lastPkts
+				local deltaTime = now - lastTime
+				local mpps = deltaPkts / deltaTime / 1e6
+				local mbps = (totalBytes * 8) / (now - tStart) / 1e6
+				log:info("[%.1fs] %.3f Mpps, %.3f Mbps", now - tStart, mpps, mbps)
+				lastTime, lastPkts = now, totalPkts
+			end
+		end
 		pcapFile:reset()
 	end
 
-	local t1 = mg.getTime()
-	local elapsed = t1 - t0
-	local pps = totalPkts / elapsed
+	local elapsed = mg.getTime() - tStart
+	local mpps = totalPkts / elapsed / 1e6
 	local mbps = (totalBytes * 8) / elapsed / 1e6
 
-	log:info("Replayed %d packets in %.3f seconds", totalPkts, elapsed)
-	log:info("Average rate: %.3f Mpps (%.3f Mbps)", pps / 1e6, mbps)
-	log:info("Waiting %.1f seconds to flush TX queues...", sleepTime)
-	mg.sleepMillisIdle(sleepTime * 1000)
+	log:info("======================================")
+	log:info("Finished %d replays of %s", iterations, file)
+	log:info("Total: %.0f packets in %.3f s", totalPkts, elapsed)
+	log:info("Average rate: %.3f Mpps, %.3f Mbps", mpps, mbps)
+	log:info("======================================")
+
+	mg.sleepMillisIdle(flushSeconds * 1000)
 end
