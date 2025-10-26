@@ -44,23 +44,25 @@ echo "================================================="
 # ---- 6. Compare PPS between sender and receiver ----
 echo "[INFO] Comparing sender vs receiver rates ..."
 
-# Strip ANSI color codes (safe even if none)
+# Strip color codes from MoonGen log just in case
 MOONGEN_CLEAN=$(sed 's/\x1B\[[0-9;]*[A-Za-z]//g' moongen_output.log)
 
-# Extract numeric values directly from "Average rate" line
+# Parse numeric values from MoonGen
 MOONGEN_MPPS=$(echo "$MOONGEN_CLEAN" | grep -Eo 'Average rate: [0-9.]+ Mpps' | tail -n1 | awk '{print $3}')
 MOONGEN_Mbps=$(echo "$MOONGEN_CLEAN" | grep -Eo '[0-9.]+ Mbps' | tail -n1 | awk '{print $1}')
 
-# Extract receiver packet rate from capinfos
-RECV_PPS=$(echo "$CAPINFOS_OUTPUT" | awk '/Average packet rate:/ {print $5}')
-RECV_UNIT=$(echo "$CAPINFOS_OUTPUT" | awk '/Average packet rate:/ {print $6}')
+# Parse receiver packet rate (handles "1226 kpackets/s" or "1.23 Mpackets/s")
+RECV_LINE=$(echo "$CAPINFOS_OUTPUT" | grep -E "Average packet rate")
+RECV_VALUE=$(echo "$RECV_LINE" | grep -Eo '[0-9.]+')
+RECV_UNIT=$(echo "$RECV_LINE" | grep -Eo '[kM]?packets/s')
 
-# Normalize receiver rate to Mpps
-if [[ "$RECV_UNIT" == "kpackets/s" ]]; then
-  RECV_MPPS=$(awk -v p="$RECV_PPS" 'BEGIN {printf "%.3f", p / 1000}')
-else
-  RECV_MPPS=$(awk -v p="$RECV_PPS" 'BEGIN {printf "%.3f", p}')
-fi
+# Convert to Mpps
+case "$RECV_UNIT" in
+  kpackets/s) RECV_MPPS=$(awk -v v="$RECV_VALUE" 'BEGIN {printf "%.3f", v/1000}') ;;
+  Mpackets/s) RECV_MPPS=$(awk -v v="$RECV_VALUE" 'BEGIN {printf "%.3f", v}') ;;
+  packets/s)  RECV_MPPS=$(awk -v v="$RECV_VALUE" 'BEGIN {printf "%.6f", v/1e6}') ;;
+  *)          RECV_MPPS=0 ;;
+esac
 
 echo "================ RATE COMPARISON ================"
 printf "Sender (MoonGen): %.3f Mpps, %.3f Mbps\n" "${MOONGEN_MPPS:-0}" "${MOONGEN_Mbps:-0}"
