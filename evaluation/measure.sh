@@ -47,16 +47,18 @@ echo "[INFO] Comparing sender vs receiver rates ..."
 # Strip color codes from MoonGen log just in case
 MOONGEN_CLEAN=$(sed 's/\x1B\[[0-9;]*[A-Za-z]//g' moongen_output.log)
 
-# Parse numeric values from MoonGen
+# Parse numeric values from MoonGen output
 MOONGEN_MPPS=$(echo "$MOONGEN_CLEAN" | grep -Eo 'Average rate: [0-9.]+ Mpps' | tail -n1 | awk '{print $3}')
-MOONGEN_Mbps=$(echo "$MOONGEN_CLEAN" | grep -Eo '[0-9.]+ Mbps' | tail -n1 | awk '{print $1}')
+MOONGEN_Mbps=$(echo "$MOONGEN_CLEAN" | grep -Eo 'Average rate: [0-9.]+ Mpps, [0-9.]+ Mbps' | tail -n1 | grep -Eo '[0-9.]+ Mbps' | awk '{print $1}')
 
-# Parse receiver packet rate (handles "1226 kpackets/s" or "1.23 Mpackets/s")
+# Parse receiver packet rate line (handles "1226 kpackets/s", "1.23 Mpackets/s", or "123456 packets/s")
 RECV_LINE=$(echo "$CAPINFOS_OUTPUT" | grep -E "Average packet rate")
-RECV_VALUE=$(echo "$RECV_LINE" | grep -Eo '[0-9.]+')
+
+# Extract the numeric value *immediately before* the unit
+RECV_VALUE=$(echo "$RECV_LINE" | grep -Eo '[0-9.]+[[:space:]]*[kM]?packets/s' | grep -Eo '[0-9.]+')
 RECV_UNIT=$(echo "$RECV_LINE" | grep -Eo '[kM]?packets/s')
 
-# Convert to Mpps
+# Convert receiver rate to Mpps
 case "$RECV_UNIT" in
   kpackets/s) RECV_MPPS=$(awk -v v="$RECV_VALUE" 'BEGIN {printf "%.3f", v/1000}') ;;
   Mpackets/s) RECV_MPPS=$(awk -v v="$RECV_VALUE" 'BEGIN {printf "%.3f", v}') ;;
@@ -68,6 +70,7 @@ echo "================ RATE COMPARISON ================"
 printf "Sender (MoonGen): %.3f Mpps, %.3f Mbps\n" "${MOONGEN_MPPS:-0}" "${MOONGEN_Mbps:-0}"
 printf "Receiver (tcpdump): %.3f Mpps\n" "${RECV_MPPS:-0}"
 
+# Compute packet loss percentage
 if [[ -n "${MOONGEN_MPPS:-}" && -n "${RECV_MPPS:-}" && $(echo "$MOONGEN_MPPS > 0" | bc) -eq 1 ]]; then
   LOSS_PCT=$(awk -v s="$MOONGEN_MPPS" -v r="$RECV_MPPS" 'BEGIN {printf "%.2f", (1 - r/s) * 100}')
   printf "Estimated packet loss: %s%%\n" "$LOSS_PCT"
