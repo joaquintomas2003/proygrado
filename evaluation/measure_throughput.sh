@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IF_IN=vf0_0
+IF_IN=vf0_3
 IF_OUT=vf0_1
-PCAP=~/epifanio_proygrado/traffic-generator/generated_int.pcap
+PCAP=~/epifanio_proygrado/traffic-generator/traces/generated_int.pcap
 RATE=10000   # target Mbps for tcpreplay
 
 # --- Capture start counters ---
@@ -12,7 +12,7 @@ out_before=$(< /sys/class/net/$IF_OUT/statistics/rx_packets)
 
 # --- Run tcpreplay ---
 echo "Running tcpreplay at ${RATE} Mbps on ${IF_IN}..."
-sudo timeout 12 tcpreplay --preload-pcap --loop=5 -i "$IF_IN" --Mbps="$RATE" "$PCAP" | tee tcpreplay.log
+sudo timeout 12 tcpreplay --preload-pcap --loop=5 -i "$IF_IN" --topspeed "$PCAP" | tee tcpreplay.log
 
 read duration < <(awk '/^Actual:/ {print $8}' tcpreplay.log)
 
