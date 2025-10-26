@@ -9,7 +9,7 @@ local pcap    = require "pcap"
 function configure(parser)
 	parser:argument("dev", "Device to use."):args(1):convert(tonumber)
 	parser:argument("file", "Pcap file to replay."):args(1)
-	parser:option("-n --iterations", "Number of replays."):default(1):convert(tonumber)
+	parser:option("-n --iterations", "Number of replays."):default(100):convert(tonumber)
 	parser:option("-s --flush-seconds", "Seconds to wait after sending to flush TX queues."):default(5):convert(tonumber)
 	local args = parser:parse()
 	return args
