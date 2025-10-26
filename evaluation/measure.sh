@@ -44,14 +44,14 @@ echo "================================================="
 # ---- 6. Compare PPS between sender and receiver ----
 echo "[INFO] Comparing sender vs receiver rates ..."
 
-# Remove any color escape codes from MoonGen output before parsing
-MOONGEN_CLEAN=$(sed 's/\x1b\[[0-9;]*m//g' moongen_output.log)
+# Strip ANSI color codes (safe even if none)
+MOONGEN_CLEAN=$(sed 's/\x1B\[[0-9;]*[A-Za-z]//g' moongen_output.log)
 
-# Extract Mpps and Mbps from MoonGen
-MOONGEN_MPPS=$(echo "$MOONGEN_CLEAN" | awk '/Average rate:/ {print $(NF-3)}' | tail -n1)
-MOONGEN_Mbps=$(echo "$MOONGEN_CLEAN" | awk '/Average rate:/ {print $NF}' | tail -n1)
+# Extract numeric values directly from "Average rate" line
+MOONGEN_MPPS=$(echo "$MOONGEN_CLEAN" | grep -Eo 'Average rate: [0-9.]+ Mpps' | tail -n1 | awk '{print $3}')
+MOONGEN_Mbps=$(echo "$MOONGEN_CLEAN" | grep -Eo '[0-9.]+ Mbps' | tail -n1 | awk '{print $1}')
 
-# Extract receiver packet rate (capinfos output)
+# Extract receiver packet rate from capinfos
 RECV_PPS=$(echo "$CAPINFOS_OUTPUT" | awk '/Average packet rate:/ {print $5}')
 RECV_UNIT=$(echo "$CAPINFOS_OUTPUT" | awk '/Average packet rate:/ {print $6}')
 
