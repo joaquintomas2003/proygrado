@@ -15,20 +15,19 @@ void evict_stale_entries(uint64_t threshold_ns) {
     uint64_t last_ts;
     __xrw uint64_t last_ts_xrw;
     uint32_t zero = 0;
-    uint32_t key_reset[4] = {0};
+    uint32_t key_reset[4] = {0,0,0,0};
     uint32_t k;
-    uint64_t current_time;
 
     for (i = 0; i < FLOWCACHE_ROWS; i++) {
       semaphore_down(&global_semaphores[i]);
-        current_time = me_tsc_read();
+        // Determine ring index
+        ring_index = i & (NUM_RINGS - 1);
         for (j = 0; j < BUCKET_SIZE; j++) {
-            entry = &int_flowcache[i].entry[j];
+            entry   = &int_flowcache[i].entry[j];
             last_ts = entry->last_update_timestamp;
 
             if (entry->packet_count != 0 && get_time_diff_ns(last_ts) > threshold_ns) {
-                // Determine ring index
-                ring_index = i & (NUM_RINGS - 1);
+                
                 semaphore_down(&ring_buffer_sem_G[ring_index]);
                   ring_info = &ring_G[ring_index];
 
