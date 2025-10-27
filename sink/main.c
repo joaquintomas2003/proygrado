@@ -126,8 +126,8 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
 
   // Declare the metadata variables
   __lmem struct pif_header_scalars *scalars;
-  __lmem struct pif_header_ingress__bitmap *bitmap;
-  __lmem struct pif_header_intrinsic_metadata *intrinsic_metadata;
+  // __lmem struct pif_header_ingress__bitmap *bitmap;
+  // __lmem struct pif_header_intrinsic_metadata *intrinsic_metadata;
   __lmem struct pif_header_ingress__node1_metadata *node;
 
   PIF_PLUGIN_app_metadata_T *app_metadata = pif_plugin_hdr_get_app_metadata(headers);
@@ -142,9 +142,9 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   hash_value        &= (FLOWCACHE_ROWS - 1);
   ring_index         = hash_value & (NUM_RINGS - 1);
 
-  bitmap             = (__lmem struct pif_header_ingress__bitmap *) (headers + PIF_PARREP_ingress__bitmap_OFF_LW);
+  // bitmap             = (__lmem struct pif_header_ingress__bitmap *) (headers + PIF_PARREP_ingress__bitmap_OFF_LW);
   scalars            = (__lmem struct pif_header_scalars *) (headers + PIF_PARREP_scalars_OFF_LW);
-  intrinsic_metadata = (__lmem struct pif_header_intrinsic_metadata *) (headers + PIF_PARREP_intrinsic_metadata_OFF_LW);
+  // intrinsic_metadata = (__lmem struct pif_header_intrinsic_metadata *) (headers + PIF_PARREP_intrinsic_metadata_OFF_LW);
 
   semaphore_down(&global_semaphores[hash_value]);
   // Search for an existing entry in the bucket
@@ -308,9 +308,9 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
       mem_read_atomic(&avg_sample, &entry->int_metric_info_value.average[k], sizeof(avg_sample));
 
       avg_sample.node_id              = node->node_id;
-      avg_sample.hop_latency         += (hop_latency - avg_sample.hop_latency) / entry->packet_count;
-      avg_sample.queue_occupancy     += (node->queue_occupancy - avg_sample.queue_occupancy) / entry->packet_count;
-      avg_sample.egress_interface_tx += (node->egress_interface_tx - avg_sample.egress_interface_tx) / entry->packet_count;
+      avg_sample.hop_latency         = (avg_sample.hop_latency         * (entry->packet_count - 1) + hop_latency)               / entry->packet_count;
+      avg_sample.queue_occupancy     = (avg_sample.queue_occupancy     * (entry->packet_count - 1) + node->queue_occupancy)     / entry->packet_count;
+      avg_sample.egress_interface_tx = (avg_sample.egress_interface_tx * (entry->packet_count - 1) + node->egress_interface_tx) / entry->packet_count;
 
       mem_write_atomic(&avg_sample, &entry->int_metric_info_value.average[k], sizeof(avg_sample));
     } else {
