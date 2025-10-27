@@ -307,10 +307,10 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
       }
       mem_read_atomic(&avg_sample, &entry->int_metric_info_value.average[k], sizeof(avg_sample));
 
-      avg_sample.node_id             = node->node_id;
-      avg_sample.hop_latency         = (avg_sample.hop_latency         * (entry->packet_count - 1) + hop_latency)               / entry->packet_count;
-      avg_sample.queue_occupancy     = (avg_sample.queue_occupancy     * (entry->packet_count - 1) + node->queue_occupancy)     / entry->packet_count;
-      avg_sample.egress_interface_tx = (avg_sample.egress_interface_tx * (entry->packet_count - 1) + node->egress_interface_tx) / entry->packet_count;
+      avg_sample.node_id              = node->node_id;
+      avg_sample.hop_latency         += (hop_latency - avg_sample.hop_latency) / entry->packet_count;
+      avg_sample.queue_occupancy     += (node->queue_occupancy - avg_sample.queue_occupancy) / entry->packet_count;
+      avg_sample.egress_interface_tx += (node->egress_interface_tx - avg_sample.egress_interface_tx) / entry->packet_count;
 
       mem_write_atomic(&avg_sample, &entry->int_metric_info_value.average[k], sizeof(avg_sample));
     } else {
