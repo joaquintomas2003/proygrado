@@ -5,6 +5,7 @@ import struct
 import yaml
 import ipaddress
 import math
+import time
 
 INT_UDP_DST_PORT = 5000  # arbitrary INT UDP port
 ORIGINAL_PROTO = 6        # TCP
@@ -255,6 +256,19 @@ def inject_int(pkt, cfg, rng, params, int_udp_dst_port):
 
     return new_pkt
 
+def assign_timestamps_fixed_pps(packets, pps, start_at_now=False):
+    """
+    Assigns timestamps to packets so that they are spaced evenly in time
+    according to a constant packets-per-second rate.
+    """
+    import time
+    interval = 1.0 / float(pps)
+    t = time.time() if start_at_now else 0.0
+
+    for pkt in packets:
+        pkt.time = t
+        t += interval
+
 def process_trace(cfg):
     input_pcap = cfg["input_pcap"]
     output_pcap = cfg["output_pcap"]
@@ -311,6 +325,9 @@ def process_trace(cfg):
             new_pkt = inject_int(app_pkt, cfg, rng, params, int_udp_dst_port)
             out_packets.append(new_pkt)
             written += 1
+
+    target_pps = float(cfg.get("target_pps", 10_000_000))  # e.g. 10 million pps
+    assign_timestamps_fixed_pps(out_packets, target_pps)
 
     wrpcap(output_pcap, out_packets)
     print(f"Done. Wrote {written} packets to {output_pcap}")
