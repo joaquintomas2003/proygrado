@@ -130,11 +130,11 @@ int main(int argc, char *argv[]) {
 
     /* 4. Start event-ring workers (I rings) */
     for (int i = 0; i < num_threads_I; i++) {
-        args[i].ring_start     = i * rings_per_thread;
-        args[i].ring_end       = (i == num_threads_I - 1) ? (NUM_RINGS - 1) : (args[i].ring_start + rings_per_thread - 1);
+        args[i].ring_start      = i * rings_per_thread;
+        args[i].ring_end        = (i == num_threads_I - 1) ? (NUM_RINGS - 1) : (args[i].ring_start + rings_per_thread - 1);
         args[i].area_rings      = area_rings_I;
         args[i].area_ring_metas = area_ring_metas_I;
-        args[i].debug_flag     = debug;
+        args[i].debug_flag      = debug;
         if (pthread_create(&threads_ring_I[i], NULL, event_ring_worker, &args[i]) != 0) {
             perror("pthread_create failed");
             ret = 1;
