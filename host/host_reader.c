@@ -67,6 +67,10 @@ int main(int argc, char *argv[]) {
     memset(area_rings_I, 0, sizeof(area_rings_I));
     memset(area_ring_metas_I, 0, sizeof(area_ring_metas_I));
 
+    pthread_t threads_ring_I[num_threads_I];
+    thread_arg_t args[num_threads_I];
+    int rings_per_thread = NUM_RINGS / num_threads_I;
+
     int ret = 0;
 
     /* 1. Open NFP device and get CPP handle */
@@ -125,23 +129,19 @@ int main(int argc, char *argv[]) {
     }
 
     /* 4. Start event-ring workers (I rings) */
-    pthread_t threads_ring_I[num_threads_I];
-    thread_arg_t args[num_threads_I];
-    int rings_per_thread = NUM_RINGS / num_threads_I;
     for (int i = 0; i < num_threads_I; i++) {
         args[i].ring_start     = i * rings_per_thread;
         args[i].ring_end       = (i == num_threads_I - 1) ? (NUM_RINGS - 1) : (args[i].ring_start + rings_per_thread - 1);
-        args[i].area_ring      = area_rings_I[i];
-        args[i].area_ring_meta = area_ring_metas_I[i];
+        args[i].area_rings      = area_rings_I;
+        args[i].area_ring_metas = area_ring_metas_I;
         args[i].debug_flag     = debug;
-
         if (pthread_create(&threads_ring_I[i], NULL, event_ring_worker, &args[i]) != 0) {
             perror("pthread_create failed");
             ret = 1;
             goto exit_cleanup_areas;
         }
     }
-
+    pause();
     /*********************** MAIN DRAIN LOOP *************************/
     printf("Starting to read all Ring buffers\n");
     if (debug) printf("\n---- Debug mode is active - detailed output enabled ----\n\n");
