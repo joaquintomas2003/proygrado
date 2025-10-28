@@ -27,12 +27,25 @@ static void interrupt_handler(int dummy) {
 
 int main(int argc, char *argv[]) {
     int opt;
-    while ((opt = getopt(argc, argv, "D")) != -1) {
+    int num_threads_I = 8;
+    while ((opt = getopt(argc, argv, "DX:H")) != -1) {
         switch (opt) {
             case 'D': debug = 1; break;
+            case 'X': num_threads_I = atoi(optarg); break;
+            case 'H':
+                printf("Usage: %s [-D] [-X threads] [-H]\n"
+                    "    -D    Enable debug mode (shows detailed output).\n"
+                    "    -X    Number of threads for I rings (1, 2, 4, or 8).\n"
+                    "    -H    Show this help message.\n",
+                    argv[0]);
+                exit(EXIT_SUCCESS);
             default:
-                fprintf(stderr, "Usage: %s [-D]    Enable debug mode (shows detailed output)\n", argv[0]);
-                exit(EXIT_FAILURE);
+                printf("Usage: %s [-D] [-X threads] [-H]\n"
+                    "    -D    Enable debug mode (shows detailed output).\n"
+                    "    -X    Number of threads for I rings (1, 2, 4, or 8).\n"
+                    "    -H    Show this help message.\n",
+                    argv[0]);
+                exit(EXIT_SUCCESS);
         }
     }
 
@@ -60,6 +73,10 @@ int main(int argc, char *argv[]) {
     memset(area_ring_metas_G, 0, sizeof(area_ring_metas_G));
     memset(area_rings_I, 0, sizeof(area_rings_I));
     memset(area_ring_metas_I, 0, sizeof(area_ring_metas_I));
+
+    pthread_t threads_ring_I[num_threads_I];
+    thread_arg_t args[num_threads_I];
+    int rings_per_thread = NUM_RINGS / num_threads_I;
 
     int ret = 0;
 
@@ -119,14 +136,12 @@ int main(int argc, char *argv[]) {
     }
 
     /* 4. Start event-ring workers (I rings) */
-    pthread_t threads_ring_I[NUM_RINGS];
-    thread_arg_t args[NUM_RINGS];
-    for (int i = 0; i < NUM_RINGS; i++) {
-        args[i].ring_index = i;
-        args[i].area_ring = area_rings_I[i];
-        args[i].area_ring_meta = area_ring_metas_I[i];
-        args[i].debug_flag = debug;
-
+    for (int i = 0; i < num_threads_I; i++) {
+        args[i].ring_start      = i * rings_per_thread;
+        args[i].ring_end        = (i == num_threads_I - 1) ? (NUM_RINGS - 1) : (args[i].ring_start + rings_per_thread - 1);
+        args[i].area_rings      = area_rings_I;
+        args[i].area_ring_metas = area_ring_metas_I;
+        args[i].debug_flag      = debug;
         if (pthread_create(&threads_ring_I[i], NULL, event_ring_worker, &args[i]) != 0) {
             perror("pthread_create failed");
             ret = 1;
@@ -240,17 +255,15 @@ int main(int argc, char *argv[]) {
                     goto exit_join_I_workers;
                 }
             }
-
             if (debug && j != 0) printf("  Processed %d entries from ring %d in iteration %llu\n\n", j, i + 1, loop_iteration);
         }
-
         if (debug) usleep(200000);
         loop_iteration++;
     }
     /*****************************************************************/
 
 exit_join_I_workers:
-    for (int i = 0; i < NUM_RINGS; i++) {
+    for (int i = 0; i < num_threads_I; i++) {
         pthread_join(threads_ring_I[i], NULL);
     }
 
@@ -267,6 +280,7 @@ exit_cleanup_nfp_device:
 
 exit_spooler_stop:
     spooler_stop();
+    event_spooler_stop();
 
     return ret;
 }
