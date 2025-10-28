@@ -7,9 +7,10 @@
 #include "nfp-common/nfp_resid.h"
 
 typedef struct {
-    int ring_index;
-    struct nfp_cpp_area *area_ring;
-    struct nfp_cpp_area *area_ring_meta;
+    int ring_start;
+    int ring_end;
+    struct nfp_cpp_area **area_rings;
+    struct nfp_cpp_area **area_ring_metas;
     int debug_flag;
 } thread_arg_t;
 
