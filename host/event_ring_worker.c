@@ -47,10 +47,10 @@ void *event_ring_worker(void *arg) {
                     return NULL;
                 }
 
-                // if (!event_spooler_enqueue(&current_ring_entry, ring)) {
-                //     /* If stop is set while waiting, break gracefully */
-                //     break;
-                // }
+                if (!event_spooler_enqueue(&current_ring_entry, ring)) {
+                    /* If stop is set while waiting, break gracefully */
+                    break;
+                }
 
                 if (debug_flag) {
                     printf("\n===== EVENT RECORD [%u] =====\n", rp);

@@ -28,17 +28,24 @@ static void interrupt_handler(int dummy) {
 int main(int argc, char *argv[]) {
     int opt;
     int num_threads_I = 8;
-    while ((opt = getopt(argc, argv, "DX:")) != -1) {
+    while ((opt = getopt(argc, argv, "DX:H")) != -1) {
         switch (opt) {
             case 'D': debug = 1; break;
             case 'X': num_threads_I = atoi(optarg); break;
+            case 'H':
+                printf("Usage: %s [-D] [-X threads] [-H]\n"
+                    "    -D    Enable debug mode (shows detailed output).\n"
+                    "    -X    Number of threads for I rings (1, 2, 4, or 8).\n"
+                    "    -H    Show this help message.\n",
+                    argv[0]);
+                exit(EXIT_SUCCESS);
             default:
-                fprintf(stderr,
-                        "Usage: %s [-D] [-X threads]\n"
-                        "    -D    Enable debug mode (shows detailed output)\n"
-                        "    -X    Number of threads for I rings (1, 2, 4, or 8)\n",
-                argv[0]);
-                exit(EXIT_FAILURE);
+                printf("Usage: %s [-D] [-X threads] [-H]\n"
+                    "    -D    Enable debug mode (shows detailed output).\n"
+                    "    -X    Number of threads for I rings (1, 2, 4, or 8).\n"
+                    "    -H    Show this help message.\n",
+                    argv[0]);
+                exit(EXIT_SUCCESS);
         }
     }
 
@@ -141,7 +148,7 @@ int main(int argc, char *argv[]) {
             goto exit_cleanup_areas;
         }
     }
-    pause();
+
     /*********************** MAIN DRAIN LOOP *************************/
     printf("Starting to read all Ring buffers\n");
     if (debug) printf("\n---- Debug mode is active - detailed output enabled ----\n\n");
@@ -273,6 +280,7 @@ exit_cleanup_nfp_device:
 
 exit_spooler_stop:
     spooler_stop();
+    event_spooler_stop();
 
     return ret;
 }
