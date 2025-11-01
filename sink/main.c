@@ -88,26 +88,17 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   // Declare the bucket entry variables
   __addr40 __emem bucket_entry *entry = 0;
   __addr40 __emem bucket_entry *victim_entry = 0;
-  // __addr40 __emem bucket_entry *ring_entry = 0;
 
   __xrw    ring_meta ring_meta_read;
-  __xrw    int_metric_sample avg_sample;
   __xrw    bucket_header_io local_header;
-
-  __xread  int_metric_sample prev_latest;
 
   __xwrite int_metric_sample sample;
   __xwrite uint32_t key_reset[4] = {0, 0, 0, 0};
-  __xwrite uint32_t key[4];
-  __xwrite uint32_t packet_count_lru;
-  __xwrite uint32_t request_meta_lru;
   __xwrite uint32_t nodes_present;
   __xwrite uint32_t request_meta;
-  __xwrite uint64_t first_packet_timestamp_lru;
-  __xwrite uint64_t timestamp;
   __xwrite uint64_t update_timestamp;
 
-  int      i, k;
+  uint32_t i, k;
   uint32_t hash_key[4];
   uint32_t hash_value;
   uint32_t evict_selected = 0;
@@ -120,13 +111,11 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   uint32_t hop_latency;
 
   uint64_t min_ts = 0xFFFFFFFFFFFFFFFFULL;
-  uint64_t aged_ts;
   uint64_t event_timestamp;
 
   void     *node_metadata_ptrs[MAX_INT_NODES];
 
   // Declare the metadata variables
-  __lmem struct pif_header_scalars *scalars;
   __lmem struct pif_header_ingress__node1_metadata *node;
 
   PIF_PLUGIN_app_metadata_T *app_metadata = pif_plugin_hdr_get_app_metadata(headers);
@@ -141,8 +130,6 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   hash_value        &= (FLOWCACHE_ROWS - 1);
   ring_index         = hash_value & (NUM_RINGS - 1);
 
-  scalars            = (__lmem struct pif_header_scalars *) (headers + PIF_PARREP_scalars_OFF_LW);
-
   semaphore_down(&global_semaphores[hash_value]);
   // Search for an existing entry in the bucket
   for (i = 0; i < BUCKET_SIZE; i++) {
@@ -154,12 +141,10 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
         local_header.key[1] == hash_key[1] &&
         local_header.key[2] == hash_key[2] &&
         local_header.key[3] == hash_key[3])) {
-        //  debug1 = 15;
       break;
     }
     /* Check for aged entries */
     if (get_time_diff_ns(local_header.last_update_timestamp) > AGE_THRESHOLD_NS) {
-        aged_ts        = get_time_diff_ns(local_header.last_update_timestamp);
         victim_entry   = entry;
         evict_selected = 1;
         break;
@@ -170,8 +155,6 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
         victim_entry = entry;
     }
   }
-  if (evict_selected) timestamp = aged_ts;
-  else timestamp = min_ts;
 
   // If we reached the end of the bucket without finding a match
   if (i == BUCKET_SIZE || evict_selected) {
@@ -182,37 +165,9 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
       f  = ring_meta_read.full;
 
       if (f == 0) {
-        // nodes_present = victim_entry->header.node_count;
-        // cant_nodes    = victim_entry->header.node_count;
-        // ring_entry    = &ring_buffer_G[ring_index].entry[wp];
         ua_memcpy_mem40_mem40((__addr40 __mem void *)&ring_buffer_G[ring_index].entry[wp], 0,
                               (__addr40 __mem void *)victim_entry,  0,
                               sizeof(struct bucket_entry));
-        // key[0] = victim_entry->header.key[0];
-        // key[1] = victim_entry->header.key[1];
-        // key[2] = victim_entry->header.key[2];
-        // key[3] = victim_entry->header.key[3];
-
-        // packet_count_lru           = victim_entry->header.packet_count;
-        // first_packet_timestamp_lru = victim_entry->header.first_packet_timestamp;
-        // request_meta_lru           = victim_entry->header.request_meta;
-
-        // mem_write64(key, &ring_entry->header.key, sizeof(key));
-        // mem_write32(&packet_count_lru, &ring_entry->header.packet_count, sizeof(packet_count_lru));
-        // mem_write64(&first_packet_timestamp_lru, &ring_entry->header.first_packet_timestamp, sizeof(first_packet_timestamp_lru));
-        // mem_write64(&timestamp, &ring_entry->header.last_update_timestamp, sizeof(timestamp));
-
-        // mem_write32(&request_meta_lru, &ring_entry->header.request_meta, sizeof(request_meta_lru));
-
-        // mem_write32(&nodes_present, &ring_entry->header.node_count, sizeof(nodes_present));
-
-        // for (k = 0; k < cant_nodes && k < MAX_INT_NODES; k++) {
-        //   sample = victim_entry->int_metric_info_value.latest[k];
-        //   mem_write64(&sample, &ring_entry->int_metric_info_value.latest[k], sizeof(sample));
-
-        //   sample = victim_entry->int_metric_info_value.average[k];
-        //   mem_write64(&sample, &ring_entry->int_metric_info_value.average[k], sizeof(sample));
-        // }
         wp = (wp + 1) & (RING_SIZE - 1);
         if(wp == rp){
             f = 1;
@@ -248,12 +203,16 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   // Increment the packet count
   mem_incr32(&entry->header.packet_count);
 
-  nodes_present = scalars->metadata__nodes_present;
-  cant_nodes    = scalars->metadata__nodes_present;
+  {
+    __lmem struct pif_header_scalars *scalars;
+    scalars            = (__lmem struct pif_header_scalars *) (headers + PIF_PARREP_scalars_OFF_LW);
+    nodes_present = scalars->metadata__nodes_present;
+    cant_nodes    = scalars->metadata__nodes_present;
+  }
 
   // If this is the first packet for this flow, initialize the entry
   if (entry->header.packet_count == 1) {
-    key[0] = hash_key[0]; key[1] = hash_key[1]; key[2] = hash_key[2]; key[3] = hash_key[3];
+    __xwrite uint32_t key[4] = {hash_key[0], hash_key[1], hash_key[2], hash_key[3]};
     mem_write64(key, entry->header.key, sizeof(key));
     mem_write32(&nodes_present, &entry->header.node_count, sizeof(nodes_present));
 
@@ -291,6 +250,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
 
     if (entry->header.packet_count > 1) {
 
+      __xread  int_metric_sample prev_latest;
       /* Read previous latest BEFORE overwriting, for C-events */
       mem_read_atomic(&prev_latest, &entry->int_metric_info_value.latest[k], sizeof(prev_latest));
 
@@ -306,14 +266,19 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
                           EVENT_C_SWITCH | metric_id,
                           event_timestamp);
       }
-      mem_read_atomic(&avg_sample, &entry->int_metric_info_value.average[k], sizeof(avg_sample));
 
-      avg_sample.node_id              = node->node_id;
-      avg_sample.hop_latency         = (avg_sample.hop_latency         * (entry->header.packet_count - 1) + hop_latency)               / entry->header.packet_count;
-      avg_sample.queue_occupancy     = (avg_sample.queue_occupancy     * (entry->header.packet_count - 1) + node->queue_occupancy)     / entry->header.packet_count;
-      avg_sample.egress_interface_tx = (avg_sample.egress_interface_tx * (entry->header.packet_count - 1) + node->egress_interface_tx) / entry->header.packet_count;
+      {
+        __xrw    int_metric_sample avg_sample;
+        mem_read_atomic(&avg_sample, &entry->int_metric_info_value.average[k], sizeof(avg_sample));
 
-      mem_write64(&avg_sample, &entry->int_metric_info_value.average[k], sizeof(avg_sample));
+        avg_sample.node_id              = node->node_id;
+        avg_sample.hop_latency         = (avg_sample.hop_latency         * (entry->header.packet_count - 1) + hop_latency)               / entry->header.packet_count;
+        avg_sample.queue_occupancy     = (avg_sample.queue_occupancy     * (entry->header.packet_count - 1) + node->queue_occupancy)     / entry->header.packet_count;
+        avg_sample.egress_interface_tx = (avg_sample.egress_interface_tx * (entry->header.packet_count - 1) + node->egress_interface_tx) / entry->header.packet_count;
+
+        mem_write64(&avg_sample, &entry->int_metric_info_value.average[k], sizeof(avg_sample));
+      }
+
     } else {
       mem_write64(&sample, &entry->int_metric_info_value.average[k], sizeof(sample));
 

@@ -3,8 +3,6 @@
 
 #include <stdint.h>
 
-#define FLOWCACHE_ROWS (1 << 10)
-#define BUCKET_SIZE 12
 #define MAX_INT_NODES 5
 #define NUM_RINGS 8
 #define RING_SIZE (1 << 16)
@@ -20,25 +18,23 @@ typedef struct int_metric_sample {
 typedef struct int_metric_info {
     int_metric_sample latest[MAX_INT_NODES];
     int_metric_sample average[MAX_INT_NODES];
-    uint32_t node_count;
 } int_metric_info;
+
+typedef struct bucket_header_io {
+    uint32_t key[4];
+    uint32_t node_count;
+    uint32_t packet_count;
+    uint32_t request_meta;
+    uint32_t _padding;
+    uint64_t first_packet_ts;
+    uint64_t last_update_ts;
+} bucket_header_io;
 
 /* 8-byte padding is needed to match NFP's compiler default padding rules */
 typedef struct bucket_entry {
-    uint32_t key[4];
-    uint32_t first_packet_ts_high;
-    uint32_t first_packet_ts_low;
-    uint32_t last_update_ts_high;
-    uint32_t last_update_ts_low;
+    bucket_header_io header;
     int_metric_info int_metric_info_value;
-    uint32_t packet_count;
-    uint32_t request_meta; // bits 0–15: request_id, bit 16: is_response, bits 17–31: reserved
-    uint32_t _padding;
 } bucket_entry;
-
-typedef struct bucket_list {
-    struct bucket_entry entry[BUCKET_SIZE];
-} bucket_list;
 
 typedef struct ring_list {
     struct bucket_entry entry[RING_SIZE];

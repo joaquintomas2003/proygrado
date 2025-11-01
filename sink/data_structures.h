@@ -33,41 +33,35 @@
 typedef struct int_metric_sample {
   uint32_t node_id; /* Node ID */
   // uint32_t ingress_and_egress_interface_id; /* Level 1 ingress interface ID */
-  uint32_t hop_latency; /* Hop latency */
-  uint32_t queue_occupancy; /* Queue occupancy */
-  // uint64_t ingress_timestamp; /* Ingress timestamp */
-  // uint64_t egress_timestamp; /* Egress timestamp */
-  // uint16_t level2_ingress_interface_id; /* Level 2 ingress interface ID */
-  // uint16_t level2_egress_interface_id; /* Level 2 egress interface ID */
-  uint32_t egress_interface_tx; /* Egress interface transmission */
-  // uint32_t buffer_occupancy; /* Buffer occupancy */
+  uint32_t hop_latency;                        /* Hop latency */
+  uint32_t queue_occupancy;                    /* Queue occupancy */
+  // uint64_t ingress_timestamp;               /* Ingress timestamp */
+  // uint64_t egress_timestamp;                /* Egress timestamp */
+  // uint16_t level2_ingress_interface_id;     /* Level 2 ingress interface ID */
+  // uint16_t level2_egress_interface_id;      /* Level 2 egress interface ID */
+  uint32_t egress_interface_tx;                /* Egress interface transmission */
+  // uint32_t buffer_occupancy;                /* Buffer occupancy */
 } int_metric_sample;
 
 typedef struct int_metric_info {
   int_metric_sample latest[MAX_INT_NODES];
   int_metric_sample average[MAX_INT_NODES];
-  // uint32_t node_count;
+
 } int_metric_info;
 
 typedef struct bucket_header_io {
-    uint32_t key[4];
+    uint32_t key[4];                 /* ipv4.src_addr, ipv4.dst_addr, (src_port << 16) | dst_port, ipv4.protocol */
     uint32_t node_count;
     uint32_t packet_count;
-    uint32_t request_meta;
-    // uint32_t _padding2;
-    uint64_t first_packet_timestamp;
-    uint64_t last_update_timestamp;
+    uint32_t request_meta;           /* bits 0–15: request_id, bit 16: is_response, bits 17–31: reserved*/
+    // uint32_t _padding;
+    uint64_t first_packet_timestamp; /* Timestamp in nanoseconds */
+    uint64_t last_update_timestamp;  /* Timestamp in nanoseconds */
 } bucket_header_io;
 
 typedef struct bucket_entry {
-  // uint32_t key[4]; /* ipv4.src_addr, ipv4.dst_addr, (src_port << 16) | dst_port, ipv4.protocol */
-  // uint64_t first_packet_timestamp; /* Timestamp in nanoseconds */
-  // uint64_t last_update_timestamp; /* Timestamp in nanoseconds */
   bucket_header_io header;
   int_metric_info int_metric_info_value;
-  // uint32_t packet_count;
-  // uint32_t request_meta; // bits 0–15: request_id, bit 16: is_response, bits 17–31: reserved
-  // uint32_t _padding2;
 } bucket_entry;
 
 typedef struct bucket_list {

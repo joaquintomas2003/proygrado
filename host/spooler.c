@@ -224,15 +224,13 @@ static void write_doc_ndjson(FILE *fp, const bucket_entry *e,
                              const char *hostname, size_t *bytes_accum, size_t *docs_accum) {
     char ts_now[48]; now_iso8601(ts_now, sizeof ts_now);
 
-    uint64_t first_packet_ts = (((uint64_t)e->first_packet_ts_high << 32) | e->first_packet_ts_low) + system_ts;
-    uint64_t last_update_ts  = (((uint64_t)e->last_update_ts_high  << 32) | e->last_update_ts_low)  + system_ts;
-    uint64_t completion_time_ms = (last_update_ts - first_packet_ts) / 1000000ull;
+    uint64_t completion_time_ms = (e->header.last_update_ts - e->header.first_packet_ts) / 1000000ull;
 
     char first_ts_system[48]; char last_ts_system[48]; char completion_ts_system[48];
-    ts_to_iso8601(first_packet_ts, first_ts_system, sizeof first_ts_system);
-    ts_to_iso8601(last_update_ts, last_ts_system, sizeof last_ts_system);
+    ts_to_iso8601(e->header.first_packet_ts, first_ts_system, sizeof first_ts_system);
+    ts_to_iso8601(e->header.last_update_ts, last_ts_system, sizeof last_ts_system);
 
-    uint32_t n = e->int_metric_info_value.node_count;
+    uint32_t n = e->header.node_count;
     if (n > MAX_INT_NODES) n = MAX_INT_NODES;
 
     size_t wrote = 0;
@@ -252,12 +250,12 @@ static void write_doc_ndjson(FILE *fp, const bucket_entry *e,
             "\"node_count\":%u,"
             "\"latest\":",
         ts_now, hostname,
-        e->key[0], e->key[1], e->key[2], e->key[3],
-        e->packet_count,
+        e->header.key[0], e->header.key[1], e->header.key[2], e->header.key[3],
+        e->header.packet_count,
         completion_time_ms,
         first_ts_system,
         last_ts_system,
-        e->request_meta,
+        e->header.request_meta,
         n
     );
 
