@@ -411,14 +411,6 @@ control MyIngress(inout headers hdr,
     inout metadata meta,
     inout standard_metadata_t standard_metadata) {
 
-  action pop_from_stacks() {
-    hdr.node1_raw_data.pop_front(1);
-    hdr.node2_raw_data.pop_front(1);
-    hdr.node3_raw_data.pop_front(1);
-    hdr.node4_raw_data.pop_front(1);
-    hdr.node5_raw_data.pop_front(1);
-  }
-
   action populate_requested_metadata() {
     meta.bitmap.node_id = (bit<1>) (hdr.int_header.instruction >> 15) & 0x1;
     meta.bitmap.level1_interfaces = (bit<1>) (hdr.int_header.instruction >> 14) & 0x1;
@@ -439,68 +431,28 @@ control MyIngress(inout headers hdr,
     if (meta.nodes_present > 4) meta.node5_metadata.node_id = hdr.node5_raw_data[0].data;
   }
 
-  action populate_level1_interfaces_metadata() {
-    if (meta.nodes_present > 0) meta.node1_metadata.level1_interfaces = hdr.node1_raw_data[0].data;
-    if (meta.nodes_present > 1) meta.node2_metadata.level1_interfaces = hdr.node2_raw_data[0].data;
-    if (meta.nodes_present > 2) meta.node3_metadata.level1_interfaces = hdr.node3_raw_data[0].data;
-    if (meta.nodes_present > 3) meta.node4_metadata.level1_interfaces = hdr.node4_raw_data[0].data;
-    if (meta.nodes_present > 4) meta.node5_metadata.level1_interfaces = hdr.node5_raw_data[0].data;
-  }
-
   action populate_hop_latency_metadata() {
-    if (meta.nodes_present > 0) meta.node1_metadata.hop_latency = hdr.node1_raw_data[0].data;
-    if (meta.nodes_present > 1) meta.node2_metadata.hop_latency = hdr.node2_raw_data[0].data;
-    if (meta.nodes_present > 2) meta.node3_metadata.hop_latency = hdr.node3_raw_data[0].data;
-    if (meta.nodes_present > 3) meta.node4_metadata.hop_latency = hdr.node4_raw_data[0].data;
-    if (meta.nodes_present > 4) meta.node5_metadata.hop_latency = hdr.node5_raw_data[0].data;
+    if (meta.nodes_present > 0) meta.node1_metadata.hop_latency = hdr.node1_raw_data[1].data;
+    if (meta.nodes_present > 1) meta.node2_metadata.hop_latency = hdr.node2_raw_data[1].data;
+    if (meta.nodes_present > 2) meta.node3_metadata.hop_latency = hdr.node3_raw_data[1].data;
+    if (meta.nodes_present > 3) meta.node4_metadata.hop_latency = hdr.node4_raw_data[1].data;
+    if (meta.nodes_present > 4) meta.node5_metadata.hop_latency = hdr.node5_raw_data[1].data;
   }
 
   action populate_queue_occupancy_metadata() {
-    if (meta.nodes_present > 0) meta.node1_metadata.queue_occupancy = hdr.node1_raw_data[0].data;
-    if (meta.nodes_present > 1) meta.node2_metadata.queue_occupancy = hdr.node2_raw_data[0].data;
-    if (meta.nodes_present > 2) meta.node3_metadata.queue_occupancy = hdr.node3_raw_data[0].data;
-    if (meta.nodes_present > 3) meta.node4_metadata.queue_occupancy = hdr.node4_raw_data[0].data;
-    if (meta.nodes_present > 4) meta.node5_metadata.queue_occupancy = hdr.node5_raw_data[0].data;
-  }
-
-  action populate_ingress_timestamp_metadata() {
-    if (meta.nodes_present > 0) meta.node1_metadata.ingress_timestamp = (bit<64>) hdr.node1_raw_data[0].data << 32 | (bit<64>) (hdr.node1_raw_data[1].data);
-    if (meta.nodes_present > 1) meta.node2_metadata.ingress_timestamp = (bit<64>) hdr.node2_raw_data[0].data << 32 | (bit<64>) (hdr.node2_raw_data[1].data);
-    if (meta.nodes_present > 2) meta.node3_metadata.ingress_timestamp = (bit<64>) hdr.node3_raw_data[0].data << 32 | (bit<64>) (hdr.node3_raw_data[1].data);
-    if (meta.nodes_present > 3) meta.node4_metadata.ingress_timestamp = (bit<64>) hdr.node4_raw_data[0].data << 32 | (bit<64>) (hdr.node4_raw_data[1].data);
-    if (meta.nodes_present > 4) meta.node5_metadata.ingress_timestamp = (bit<64>) hdr.node5_raw_data[0].data << 32 | (bit<64>) (hdr.node5_raw_data[1].data);
-  }
-
-  action populate_egress_timestamp_metadata() {
-    if (meta.nodes_present > 0) meta.node1_metadata.egress_timestamp = (bit<64>) hdr.node1_raw_data[0].data << 32 | (bit<64>) (hdr.node1_raw_data[1].data);
-    if (meta.nodes_present > 1) meta.node2_metadata.egress_timestamp = (bit<64>) hdr.node2_raw_data[0].data << 32 | (bit<64>) (hdr.node2_raw_data[1].data);
-    if (meta.nodes_present > 2) meta.node3_metadata.egress_timestamp = (bit<64>) hdr.node3_raw_data[0].data << 32 | (bit<64>) (hdr.node3_raw_data[1].data);
-    if (meta.nodes_present > 3) meta.node4_metadata.egress_timestamp = (bit<64>) hdr.node4_raw_data[0].data << 32 | (bit<64>) (hdr.node4_raw_data[1].data);
-    if (meta.nodes_present > 4) meta.node5_metadata.egress_timestamp = (bit<64>) hdr.node5_raw_data[0].data << 32 | (bit<64>) (hdr.node5_raw_data[1].data);
-  }
-
-  action populate_level2_interfaces_metadata() {
-    if (meta.nodes_present > 0) meta.node1_metadata.level2_interfaces = (bit<64>) hdr.node1_raw_data[0].data << 32 | (bit<64>) (hdr.node1_raw_data[1].data);
-    if (meta.nodes_present > 1) meta.node2_metadata.level2_interfaces = (bit<64>) hdr.node2_raw_data[0].data << 32 | (bit<64>) (hdr.node2_raw_data[1].data);
-    if (meta.nodes_present > 2) meta.node3_metadata.level2_interfaces = (bit<64>) hdr.node3_raw_data[0].data << 32 | (bit<64>) (hdr.node3_raw_data[1].data);
-    if (meta.nodes_present > 3) meta.node4_metadata.level2_interfaces = (bit<64>) hdr.node4_raw_data[0].data << 32 | (bit<64>) (hdr.node4_raw_data[1].data);
-    if (meta.nodes_present > 4) meta.node5_metadata.level2_interfaces = (bit<64>) hdr.node5_raw_data[0].data << 32 | (bit<64>) (hdr.node5_raw_data[1].data);
+    if (meta.nodes_present > 0) meta.node1_metadata.queue_occupancy = hdr.node1_raw_data[2].data;
+    if (meta.nodes_present > 1) meta.node2_metadata.queue_occupancy = hdr.node2_raw_data[2].data;
+    if (meta.nodes_present > 2) meta.node3_metadata.queue_occupancy = hdr.node3_raw_data[2].data;
+    if (meta.nodes_present > 3) meta.node4_metadata.queue_occupancy = hdr.node4_raw_data[2].data;
+    if (meta.nodes_present > 4) meta.node5_metadata.queue_occupancy = hdr.node5_raw_data[2].data;
   }
 
   action populate_egress_interface_tx_metadata() {
-    if (meta.nodes_present > 0) meta.node1_metadata.egress_interface_tx = (bit<32>) hdr.node1_raw_data[0].data;
-    if (meta.nodes_present > 1) meta.node2_metadata.egress_interface_tx = (bit<32>) hdr.node2_raw_data[0].data;
-    if (meta.nodes_present > 2) meta.node3_metadata.egress_interface_tx = (bit<32>) hdr.node3_raw_data[0].data;
-    if (meta.nodes_present > 3) meta.node4_metadata.egress_interface_tx = (bit<32>) hdr.node4_raw_data[0].data;
-    if (meta.nodes_present > 4) meta.node5_metadata.egress_interface_tx = (bit<32>) hdr.node5_raw_data[0].data;
-  }
-
-  action populate_buffer_occupancy_metadata() {
-    if (meta.nodes_present > 0) meta.node1_metadata.buffer_occupancy = (bit<32>) hdr.node1_raw_data[0].data;
-    if (meta.nodes_present > 1) meta.node2_metadata.buffer_occupancy = (bit<32>) hdr.node2_raw_data[0].data;
-    if (meta.nodes_present > 2) meta.node3_metadata.buffer_occupancy = (bit<32>) hdr.node3_raw_data[0].data;
-    if (meta.nodes_present > 3) meta.node4_metadata.buffer_occupancy = (bit<32>) hdr.node4_raw_data[0].data;
-    if (meta.nodes_present > 4) meta.node5_metadata.buffer_occupancy = (bit<32>) hdr.node5_raw_data[0].data;
+    if (meta.nodes_present > 0) meta.node1_metadata.egress_interface_tx = (bit<32>) hdr.node1_raw_data[3].data;
+    if (meta.nodes_present > 1) meta.node2_metadata.egress_interface_tx = (bit<32>) hdr.node2_raw_data[3].data;
+    if (meta.nodes_present > 2) meta.node3_metadata.egress_interface_tx = (bit<32>) hdr.node3_raw_data[3].data;
+    if (meta.nodes_present > 3) meta.node4_metadata.egress_interface_tx = (bit<32>) hdr.node4_raw_data[3].data;
+    if (meta.nodes_present > 4) meta.node5_metadata.egress_interface_tx = (bit<32>) hdr.node5_raw_data[3].data;
   }
 
   apply {
@@ -509,41 +461,17 @@ control MyIngress(inout headers hdr,
 
       if (meta.bitmap.node_id == 1) {
         populate_node_id_metadata();
-        pop_from_stacks();
       }
-      if (meta.bitmap.level1_interfaces == 1) {
-        populate_level1_interfaces_metadata();
-        pop_from_stacks();
-      }
+
       if (meta.bitmap.hop_latency == 1) {
         populate_hop_latency_metadata();
-        pop_from_stacks();
       }
       if (meta.bitmap.queue_occupancy == 1) {
         populate_queue_occupancy_metadata();
-        pop_from_stacks();
       }
-      if (meta.bitmap.ingress_timestamp == 1) {
-        populate_ingress_timestamp_metadata();
-        pop_from_stacks();
-        pop_from_stacks();
-      }
-      if (meta.bitmap.egress_timestamp == 1) {
-        populate_egress_timestamp_metadata();
-        pop_from_stacks();
-        pop_from_stacks();
-      }
-      if (meta.bitmap.level2_interfaces == 1) {
-        populate_level2_interfaces_metadata();
-        pop_from_stacks();
-        pop_from_stacks();
-      }
+
       if (meta.bitmap.egress_interface_tx == 1) {
         populate_egress_interface_tx_metadata();
-        pop_from_stacks();
-      }
-      if (meta.bitmap.buffer_occupancy == 1) {
-        populate_buffer_occupancy_metadata();
       }
 
       if (hdr.intl4_shim.isValid()) {
