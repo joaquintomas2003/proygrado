@@ -6,7 +6,7 @@
 #define IP_PROTO_UDP 0x11
 #define IP_PROTO_TCP 0x6
 #define NUM_RINGS 8
-#define RING_SIZE (1 << 16)
+#define RING_SIZE (1 << 17)
 
 #define x1 1                        //2^0
 #define x2 x1, x1                   //2^1
@@ -46,17 +46,28 @@ typedef struct int_metric_sample {
 typedef struct int_metric_info {
   int_metric_sample latest[MAX_INT_NODES];
   int_metric_sample average[MAX_INT_NODES];
-  uint32_t node_count;
+  // uint32_t node_count;
 } int_metric_info;
 
+typedef struct bucket_header_io {
+    uint32_t key[4];
+    uint32_t node_count;
+    uint32_t packet_count;
+    uint32_t request_meta;
+    // uint32_t _padding2;
+    uint64_t first_packet_timestamp;
+    uint64_t last_update_timestamp;
+} bucket_header_io;
+
 typedef struct bucket_entry {
-  uint32_t key[4]; /* ipv4.src_addr, ipv4.dst_addr, (src_port << 16) | dst_port, ipv4.protocol */
-  uint64_t first_packet_timestamp; /* Timestamp in nanoseconds */
-  uint64_t last_update_timestamp; /* Timestamp in nanoseconds */
+  // uint32_t key[4]; /* ipv4.src_addr, ipv4.dst_addr, (src_port << 16) | dst_port, ipv4.protocol */
+  // uint64_t first_packet_timestamp; /* Timestamp in nanoseconds */
+  // uint64_t last_update_timestamp; /* Timestamp in nanoseconds */
+  bucket_header_io header;
   int_metric_info int_metric_info_value;
-  uint32_t packet_count;
-  uint32_t request_meta; // bits 0–15: request_id, bit 16: is_response, bits 17–31: reserved
-  uint32_t _padding2;
+  // uint32_t packet_count;
+  // uint32_t request_meta; // bits 0–15: request_id, bit 16: is_response, bits 17–31: reserved
+  // uint32_t _padding2;
 } bucket_entry;
 
 typedef struct bucket_list {

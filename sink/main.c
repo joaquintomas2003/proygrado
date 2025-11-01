@@ -65,8 +65,8 @@ static __inline int _push_event_to_RI(uint32_t ring_index,
     wr0[1] = value;
     wr0[2] = event_bitmap;
 
-    mem_write_atomic(wr0, slot, sizeof(wr0));
-    mem_write_atomic(&timestamp, &slot->event_timestamp, sizeof(timestamp));
+    mem_write32(wr0, slot, sizeof(wr0));
+    mem_write32(&timestamp, &slot->event_timestamp, sizeof(timestamp));
 
     wp = (wp + 1) & (RING_SIZE - 1);
     if (wp == rp) f = 1;
@@ -75,7 +75,7 @@ static __inline int _push_event_to_RI(uint32_t ring_index,
     md_buf.read_pointer  = rp;
     md_buf.full          = f;
 
-    mem_write_atomic(&md_buf, ri_meta, sizeof(md_buf));
+    mem_write64(&md_buf, ri_meta, sizeof(md_buf));
   semaphore_up(&ring_buffer_sem_I[ring_index]);
   return 0;
 }
@@ -88,10 +88,11 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   // Declare the bucket entry variables
   __addr40 __emem bucket_entry *entry = 0;
   __addr40 __emem bucket_entry *victim_entry = 0;
-  __addr40 __emem bucket_entry *ring_entry = 0;
+  // __addr40 __emem bucket_entry *ring_entry = 0;
 
   __xrw    ring_meta ring_meta_read;
   __xrw    int_metric_sample avg_sample;
+  __xrw    bucket_header_io local_header;
 
   __xread  int_metric_sample prev_latest;
 
@@ -126,8 +127,6 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
 
   // Declare the metadata variables
   __lmem struct pif_header_scalars *scalars;
-  // __lmem struct pif_header_ingress__bitmap *bitmap;
-  // __lmem struct pif_header_intrinsic_metadata *intrinsic_metadata;
   __lmem struct pif_header_ingress__node1_metadata *node;
 
   PIF_PLUGIN_app_metadata_T *app_metadata = pif_plugin_hdr_get_app_metadata(headers);
@@ -142,32 +141,32 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   hash_value        &= (FLOWCACHE_ROWS - 1);
   ring_index         = hash_value & (NUM_RINGS - 1);
 
-  // bitmap             = (__lmem struct pif_header_ingress__bitmap *) (headers + PIF_PARREP_ingress__bitmap_OFF_LW);
   scalars            = (__lmem struct pif_header_scalars *) (headers + PIF_PARREP_scalars_OFF_LW);
-  // intrinsic_metadata = (__lmem struct pif_header_intrinsic_metadata *) (headers + PIF_PARREP_intrinsic_metadata_OFF_LW);
 
   semaphore_down(&global_semaphores[hash_value]);
   // Search for an existing entry in the bucket
   for (i = 0; i < BUCKET_SIZE; i++) {
     entry = &int_flowcache[hash_value].entry[i];
+    mem_read32(&local_header, &entry->header, sizeof(local_header));
 
-    if (entry->packet_count == 0 ||
-       (entry->key[0] == hash_key[0] &&
-        entry->key[1] == hash_key[1] &&
-        entry->key[2] == hash_key[2] &&
-        entry->key[3] == hash_key[3])) {
+    if (local_header.packet_count == 0 ||
+       (local_header.key[0] == hash_key[0] &&
+        local_header.key[1] == hash_key[1] &&
+        local_header.key[2] == hash_key[2] &&
+        local_header.key[3] == hash_key[3])) {
+        //  debug1 = 15;
       break;
     }
     /* Check for aged entries */
-    if (get_time_diff_ns(entry->last_update_timestamp) > AGE_THRESHOLD_NS) {
-        aged_ts        = get_time_diff_ns(entry->last_update_timestamp);
+    if (get_time_diff_ns(local_header.last_update_timestamp) > AGE_THRESHOLD_NS) {
+        aged_ts        = get_time_diff_ns(local_header.last_update_timestamp);
         victim_entry   = entry;
         evict_selected = 1;
         break;
     }
     /* Keep track of the LRU bucket in case of no aged entries */
-    if (entry->last_update_timestamp < min_ts) {
-        min_ts       = entry->last_update_timestamp;
+    if (local_header.last_update_timestamp < min_ts) {
+        min_ts       = local_header.last_update_timestamp;
         victim_entry = entry;
     }
   }
@@ -183,42 +182,44 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
       f  = ring_meta_read.full;
 
       if (f == 0) {
-        nodes_present = victim_entry->int_metric_info_value.node_count;
-        cant_nodes    = victim_entry->int_metric_info_value.node_count;
-        ring_entry    = &ring_buffer_G[ring_index].entry[wp];
+        // nodes_present = victim_entry->header.node_count;
+        // cant_nodes    = victim_entry->header.node_count;
+        // ring_entry    = &ring_buffer_G[ring_index].entry[wp];
+        ua_memcpy_mem40_mem40((__addr40 __mem void *)&ring_buffer_G[ring_index].entry[wp], 0,
+                              (__addr40 __mem void *)victim_entry,  0,
+                              sizeof(struct bucket_entry));
+        // key[0] = victim_entry->header.key[0];
+        // key[1] = victim_entry->header.key[1];
+        // key[2] = victim_entry->header.key[2];
+        // key[3] = victim_entry->header.key[3];
 
-        key[0] = victim_entry->key[0];
-        key[1] = victim_entry->key[1];
-        key[2] = victim_entry->key[2];
-        key[3] = victim_entry->key[3];
+        // packet_count_lru           = victim_entry->header.packet_count;
+        // first_packet_timestamp_lru = victim_entry->header.first_packet_timestamp;
+        // request_meta_lru           = victim_entry->header.request_meta;
 
-        packet_count_lru           = victim_entry->packet_count;
-        first_packet_timestamp_lru = victim_entry->first_packet_timestamp;
-        request_meta_lru           = victim_entry->request_meta;
+        // mem_write64(key, &ring_entry->header.key, sizeof(key));
+        // mem_write32(&packet_count_lru, &ring_entry->header.packet_count, sizeof(packet_count_lru));
+        // mem_write64(&first_packet_timestamp_lru, &ring_entry->header.first_packet_timestamp, sizeof(first_packet_timestamp_lru));
+        // mem_write64(&timestamp, &ring_entry->header.last_update_timestamp, sizeof(timestamp));
 
-        mem_write_atomic(key, &ring_entry->key, sizeof(key));
-        mem_write_atomic(&packet_count_lru, &ring_entry->packet_count, sizeof(packet_count_lru));
-        mem_write_atomic(&first_packet_timestamp_lru, &ring_entry->first_packet_timestamp, sizeof(first_packet_timestamp_lru));
-        mem_write_atomic(&timestamp, &ring_entry->last_update_timestamp, sizeof(timestamp));
+        // mem_write32(&request_meta_lru, &ring_entry->header.request_meta, sizeof(request_meta_lru));
 
-        mem_write_atomic(&request_meta_lru, &ring_entry->request_meta, sizeof(request_meta_lru));
+        // mem_write32(&nodes_present, &ring_entry->header.node_count, sizeof(nodes_present));
 
-        mem_write_atomic(&nodes_present, &ring_entry->int_metric_info_value.node_count, sizeof(nodes_present));
+        // for (k = 0; k < cant_nodes && k < MAX_INT_NODES; k++) {
+        //   sample = victim_entry->int_metric_info_value.latest[k];
+        //   mem_write64(&sample, &ring_entry->int_metric_info_value.latest[k], sizeof(sample));
 
-        for (k = 0; k < cant_nodes && k < MAX_INT_NODES; k++) {
-          sample = victim_entry->int_metric_info_value.latest[k];
-          mem_write_atomic(&sample, &ring_entry->int_metric_info_value.latest[k], sizeof(sample));
-
-          sample = victim_entry->int_metric_info_value.average[k];
-          mem_write_atomic(&sample, &ring_entry->int_metric_info_value.average[k], sizeof(sample));
-        }
+        //   sample = victim_entry->int_metric_info_value.average[k];
+        //   mem_write64(&sample, &ring_entry->int_metric_info_value.average[k], sizeof(sample));
+        // }
         wp = (wp + 1) & (RING_SIZE - 1);
         if(wp == rp){
             f = 1;
         }
         /* Free the bucket on the hash table */
-        mem_write_atomic(&key_reset[0], &victim_entry->packet_count, sizeof(uint32_t));
-        mem_write_atomic(&key_reset, &victim_entry->key, sizeof(key_reset));
+        mem_write32(&key_reset[0], &victim_entry->header.packet_count, sizeof(uint32_t));
+        mem_write64(&key_reset, &victim_entry->header.key, sizeof(key_reset));
         /* We were on the last bucket, now we are on the free'd bucket*/
         entry = victim_entry;
 
@@ -228,7 +229,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
       ring_meta_read.write_pointer = wp;
       ring_meta_read.full          = f;
       ring_meta_read.read_pointer  = rp;
-      mem_write_atomic(&ring_meta_read, &ring_G[ring_index], sizeof(ring_meta_read));
+      mem_write64(&ring_meta_read, &ring_G[ring_index], sizeof(ring_meta_read));
     semaphore_up(&ring_buffer_sem_G[ring_index]);
   }
 
@@ -241,26 +242,26 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
 
   // Save the last update timestamp
   update_timestamp = ticks_to_ns(me_tsc_read());
-  mem_write_atomic(&update_timestamp, &entry->last_update_timestamp, sizeof(update_timestamp));
-  event_timestamp  = entry->last_update_timestamp;
+  mem_write64(&update_timestamp, &entry->header.last_update_timestamp, sizeof(update_timestamp));
+  event_timestamp  = entry->header.last_update_timestamp;
 
   // Increment the packet count
-  mem_incr32(&entry->packet_count);
+  mem_incr32(&entry->header.packet_count);
 
   nodes_present = scalars->metadata__nodes_present;
   cant_nodes    = scalars->metadata__nodes_present;
 
   // If this is the first packet for this flow, initialize the entry
-  if (entry->packet_count == 1) {
+  if (entry->header.packet_count == 1) {
     key[0] = hash_key[0]; key[1] = hash_key[1]; key[2] = hash_key[2]; key[3] = hash_key[3];
-    mem_write_atomic(key, entry->key, sizeof(key));
-    mem_write_atomic(&nodes_present, &entry->int_metric_info_value.node_count, sizeof(nodes_present));
+    mem_write64(key, entry->header.key, sizeof(key));
+    mem_write32(&nodes_present, &entry->header.node_count, sizeof(nodes_present));
 
     // Set the first packet timestamp
-    mem_write_atomic(&update_timestamp, &entry->first_packet_timestamp, sizeof(update_timestamp));
+    mem_write64(&update_timestamp, &entry->header.first_packet_timestamp, sizeof(update_timestamp));
 
     request_meta = app_metadata->request_metadata;
-    mem_write_atomic(&request_meta, &entry->request_meta, sizeof(request_meta));
+    mem_write32(&request_meta, &entry->header.request_meta, sizeof(request_meta));
   }
 
   for (k = 0; k < cant_nodes && k < MAX_INT_NODES; k++) {
@@ -288,7 +289,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
     sample.queue_occupancy     = node->queue_occupancy;
     sample.egress_interface_tx = node->egress_interface_tx;
 
-    if (entry->packet_count > 1) {
+    if (entry->header.packet_count > 1) {
 
       /* Read previous latest BEFORE overwriting, for C-events */
       mem_read_atomic(&prev_latest, &entry->int_metric_info_value.latest[k], sizeof(prev_latest));
@@ -308,19 +309,19 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
       mem_read_atomic(&avg_sample, &entry->int_metric_info_value.average[k], sizeof(avg_sample));
 
       avg_sample.node_id              = node->node_id;
-      avg_sample.hop_latency         = (avg_sample.hop_latency         * (entry->packet_count - 1) + hop_latency)               / entry->packet_count;
-      avg_sample.queue_occupancy     = (avg_sample.queue_occupancy     * (entry->packet_count - 1) + node->queue_occupancy)     / entry->packet_count;
-      avg_sample.egress_interface_tx = (avg_sample.egress_interface_tx * (entry->packet_count - 1) + node->egress_interface_tx) / entry->packet_count;
+      avg_sample.hop_latency         = (avg_sample.hop_latency         * (entry->header.packet_count - 1) + hop_latency)               / entry->header.packet_count;
+      avg_sample.queue_occupancy     = (avg_sample.queue_occupancy     * (entry->header.packet_count - 1) + node->queue_occupancy)     / entry->header.packet_count;
+      avg_sample.egress_interface_tx = (avg_sample.egress_interface_tx * (entry->header.packet_count - 1) + node->egress_interface_tx) / entry->header.packet_count;
 
-      mem_write_atomic(&avg_sample, &entry->int_metric_info_value.average[k], sizeof(avg_sample));
+      mem_write64(&avg_sample, &entry->int_metric_info_value.average[k], sizeof(avg_sample));
     } else {
-      mem_write_atomic(&sample, &entry->int_metric_info_value.average[k], sizeof(sample));
+      mem_write64(&sample, &entry->int_metric_info_value.average[k], sizeof(sample));
 
       /* This way, we wont trigger a C-event e2e */
       e2e_prev_hop = e2e_curr_hop;
     }
     /* We can write after the IF without problem */
-    mem_write_atomic(&sample, &entry->int_metric_info_value.latest[k], sizeof(sample));
+    mem_write64(&sample, &entry->int_metric_info_value.latest[k], sizeof(sample));
   }
   semaphore_up(&global_semaphores[hash_value]);
 
