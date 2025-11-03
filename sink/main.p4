@@ -553,6 +553,10 @@ control MyIngress(inout headers hdr,
           hdr.int_header.setInvalid();
           hdr.intl4_shim.setInvalid();
 
+          if (hdr.intl4_shim.npt == 1) {
+            hdr.udp.dst_port = (bit<16>) ((hdr.intl4_shim.first_word_of_udp_port << 8) | hdr.intl4_shim.reserved);
+          }
+
           standard_metadata.egress_spec = 769;
         }
       }
