@@ -48,7 +48,7 @@ header ipv4_t {
 header udp_t {
   bit<16> src_port;
   bit<16> dst_port;
-  bit<16> length_;
+  bit<16> length;
   bit<16> checksum;
 }
 
@@ -556,6 +556,11 @@ control MyIngress(inout headers hdr,
           if (hdr.intl4_shim.npt == 1) {
             hdr.udp.dst_port = (bit<16>) ((hdr.intl4_shim.first_word_of_udp_port << 8) | hdr.intl4_shim.reserved);
           }
+
+          bit<16> ipv4_header_bytes = 20;
+          bit<16> udp_new_length = hdr.udp.length - (bit<16>)(4 + hdr.intl4_shim.len * 4);
+          hdr.udp.length = udp_new_length;
+          hdr.ipv4.total_len = ipv4_header_bytes + udp_new_length;
 
           standard_metadata.egress_spec = 769;
         }
