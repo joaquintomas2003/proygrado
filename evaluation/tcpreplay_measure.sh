@@ -1,17 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# --- Arguments ---
+if [[ $# -ne 1 ]]; then
+  echo "Usage: $0 <pcap_file>"
+  exit 1
+fi
+
+PCAP="$1"
+
+if [[ ! -f "$PCAP" ]]; then
+  echo "Error: file '$PCAP' not found."
+  exit 1
+fi
+
+# --- Fixed parameters ---
 IF_IN=vf0_3
 IF_OUT=vf0_1
-PCAP=~/epifanio_proygrado/traffic-generator/traces/generated_int.pcap
-RATE=10000   # target Mbps for tcpreplay
 
 # --- Capture start counters ---
 in_before=$(< /sys/class/net/$IF_IN/statistics/tx_packets)
 out_before=$(< /sys/class/net/$IF_OUT/statistics/rx_packets)
 
 # --- Run tcpreplay ---
-echo "Running tcpreplay at ${RATE} Mbps on ${IF_IN}..."
+echo "Running tcpreplay at top-speed on ${IF_IN}..."
 sudo timeout 12 tcpreplay --preload-pcap --loop=5 -i "$IF_IN" --topspeed "$PCAP" | tee tcpreplay.log
 
 read duration < <(awk '/^Actual:/ {print $8}' tcpreplay.log)

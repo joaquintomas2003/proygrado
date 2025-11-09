@@ -14,3 +14,5 @@ traffic-generator/traces/*
 
 host/*.o
 host/host_reader
+
+tcpreplay.log
