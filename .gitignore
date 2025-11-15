@@ -7,6 +7,8 @@ transit_hop/out/
 transit_hop/pifout/
 transit_hop/*.list
 transit_hop/*.obj
+wire/out/
+wire/pifout/
 Makefile-nfp4build
 
 traffic-generator/traces/*

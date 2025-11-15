@@ -562,7 +562,7 @@ control MyIngress(inout headers hdr,
           hdr.udp.length = udp_new_length;
           hdr.ipv4.total_len = ipv4_header_bytes + udp_new_length;
 
-          standard_metadata.egress_spec = 769;
+          standard_metadata.egress_spec = 1;
         }
       }
     }
