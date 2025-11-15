@@ -194,8 +194,7 @@ def inject_int(pkt, cfg, rng, params, int_udp_dst_port):
         orig_dport = pkt[UDP].dport
         # shim stores original dport for sink restoration
         shim = build_int_shim(hop_ml, num_hops, npt=1, orig_udp_dport=orig_dport)
-        max_payload_len = 4 # req metadata
-        orig_payload = bytes(pkt[UDP].payload)[:max_payload_len]
+        orig_payload = bytes(pkt[UDP].payload)
 
         int_payload = shim + md_header + metadata_stack + orig_payload
 
@@ -212,9 +211,8 @@ def inject_int(pkt, cfg, rng, params, int_udp_dst_port):
     else:
         original_proto = pkt[IP].proto
         shim = build_int_shim(hop_ml, num_hops, npt=2, orig_ip_proto=original_proto)
-        max_payload_len = 24 # 20B Ip header + 4B req metadata
         # original L4 bytes (transport header + payload)
-        orig_transport_and_payload = bytes(pkt[IP].payload)[:max_payload_len]
+        orig_transport_and_payload = bytes(pkt[IP].payload)
 
         # final raw payload for INT
         int_payload = shim + md_header + metadata_stack + orig_transport_and_payload
@@ -255,6 +253,53 @@ def inject_int(pkt, cfg, rng, params, int_udp_dst_port):
 
     return new_pkt
 
+def truncate_to_64B(pkt):
+    """
+    Truncate an Ethernet frame to 64 bytes (minimum frame size).
+    Recalculates IP/UDP/TCP fields after truncation.
+    """
+    raw = bytes(pkt)
+
+    target_len = 64
+
+    if len(raw) <= target_len:
+        # Already short enough — pad with zeros if needed
+        raw = raw.ljust(target_len, b"\x00")
+        return Ether(raw)
+
+    # Otherwise truncate
+    raw = raw[:target_len]
+
+    # Reconstruct
+    truncated = Ether(raw)
+
+    # Fix IP / UDP / TCP internals if present
+    if truncated.haslayer(IP):
+        ip = truncated[IP]
+
+        # Remove possible corruption tail
+        if ip.len is None:
+            ip.len = len(bytes(ip))
+
+        # Recompute IP total length = full IP header + payload
+        ip_len = len(bytes(ip))
+        ip.len = ip_len
+        del ip.chksum
+
+        # Fix UDP or TCP
+        if truncated.haslayer(UDP):
+            udp = truncated[UDP]
+            udp.len = len(bytes(udp))
+            del udp.chksum
+
+        if truncated.haslayer(TCP):
+            tcp = truncated[TCP]
+            # TCP has no length field; only checksum
+            del tcp.chksum
+
+    # Rebuild with recalculated fields
+    return Ether(bytes(truncated))
+
 def process_trace(cfg):
     input_pcap = cfg["input_pcap"]
     output_pcap = cfg["output_pcap"]
@@ -286,6 +331,8 @@ def process_trace(cfg):
     for idx, pkt in enumerate(in_packets):
         if not pkt.haslayer(IP):
             continue
+
+        pkt = truncate_to_64B(pkt)
 
         request_pkt = pkt.copy()
         response_pkt = pkt.copy()
