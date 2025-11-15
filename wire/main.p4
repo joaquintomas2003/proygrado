@@ -63,8 +63,11 @@ control MyIngress(inout headers hdr,
   }
 
   apply {
-    if (hdr.ethernet.isValid()) {
+    if (hdr.ethernet.isValid() && standard_metadata.ingress_port == 768) {
       standard_metadata.egress_spec = 0;
+    }
+    if (hdr.ethernet.isValid() && standard_metadata.ingress_port == 1) {
+      standard_metadata.egress_spec = 771;
     }
   }
 }
