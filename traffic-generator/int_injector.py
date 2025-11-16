@@ -5,6 +5,7 @@ import struct
 import yaml
 import ipaddress
 import math
+import csv
 
 INT_UDP_DST_PORT = 5000  # arbitrary INT UDP port
 ORIGINAL_PROTO = 6        # TCP
@@ -145,8 +146,10 @@ def gen_metadata_field_for_name(name, params, rng=random):
     # default: 32-bit random
     return rng.randint(0, (1 << 32) - 1)
 
-def generate_metadata_for_hop(node_id, instruction_bitmap, params, rng=random):
+def generate_metadata_for_hop(node_id, instruction_bitmap, params, rng=random, packet_id=None, gt_rows=None):
     metadata = b""
+    hop_record = {}  # valores ground truth del hop
+
     for bit in range(16):
         if instruction_bitmap & (1 << (15 - bit)):
             name, size = INSTRUCTION_FIELDS.get(bit, ("unknown", 4))
@@ -155,14 +158,32 @@ def generate_metadata_for_hop(node_id, instruction_bitmap, params, rng=random):
                 metadata += struct.pack("!I", value)
             else:
                 value = gen_metadata_field_for_name(name, params, rng)
+                hop_record[name] = value
                 if size == 4:
                     metadata += struct.pack("!I", value & 0xffffffff)
                 elif size == 8:
                     metadata += struct.pack("!Q", value & 0xffffffffffffffff)
+
+    # si hay CSV, guardar los valores
+    if gt_rows is not None and packet_id is not None:
+        for k, v in hop_record.items():
+            gt_rows.append({
+                "packet_id": packet_id,
+                "hop_id": node_id,
+                "metric": k,
+                "value": v
+            })
+
     return metadata
 
-def build_metadata_stack(hops, instruction_bitmap, params, rng):
-    return b"".join(generate_metadata_for_hop(h, instruction_bitmap, params, rng) for h in hops)
+def build_metadata_stack(hops, instruction_bitmap, params, rng, packet_id=None, gt_rows=None):
+    return b"".join(
+        generate_metadata_for_hop(
+            h, instruction_bitmap, params, rng,
+            packet_id=packet_id, gt_rows=gt_rows
+        )
+        for h in hops
+    )
 
 # 16 bits ID + 1 bit flag (shift en el bit más alto del tercer byte)
 def build_app_metadata(packet_id: int, is_response: bool):
@@ -186,7 +207,11 @@ def inject_int(pkt, cfg, rng, params, int_udp_dst_port):
 
     rhc = MAX_INT_NODES - num_hops
     md_header = build_int_md_header(hop_ml, rhc=rhc, instruction_bitmap=instruction_bitmap)
-    metadata_stack = build_metadata_stack(hop_ids, instruction_bitmap, params, rng)
+    metadata_stack = build_metadata_stack(
+        hop_ids, instruction_bitmap, params, rng,
+        packet_id=cfg.get("_current_packet_id"),
+        gt_rows=cfg.get("_gt_rows")
+    )
 
     # ----------------
     # Case 1: original already has UDP
@@ -318,6 +343,9 @@ def process_trace(cfg):
         "queue_max": 300,
         })
 
+    generate_csv = cfg.get("generate_ground_truth_csv", False)
+    gt_rows = []  # Para filas del CSV
+
     print(f"Loading {input_pcap} ...")
     in_packets = rdpcap(input_pcap)
     print(f"Read {len(in_packets)} packets")
@@ -357,11 +385,22 @@ def process_trace(cfg):
                 base_pkt = base_pkt / Raw(app_md)
         next_packet_id += 1
 
+        cfg["_current_packet_id"] = next_packet_id
+        cfg["_gt_rows"] = gt_rows
+
         # INT a ambos
         for app_pkt in [request_pkt, response_pkt]:
             new_pkt = inject_int(app_pkt, cfg, rng, params, int_udp_dst_port)
             out_packets.append(new_pkt)
             written += 1
+
+    if generate_csv:
+        csv_path = cfg.get("ground_truth_csv_path", "ground_truth.csv")
+        with open(csv_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=["packet_id", "hop_id", "metric", "value"])
+            writer.writeheader()
+            writer.writerows(gt_rows)
+    print(f"[GT] Ground truth CSV written to {csv_path} ({len(gt_rows)} rows)")
 
     wrpcap(output_pcap, out_packets)
     print(f"Done. Wrote {written} packets to {output_pcap}")

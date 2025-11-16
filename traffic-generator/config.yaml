@@ -19,3 +19,6 @@ hops: [1, 2, 3, 4, 5]
 instruction_bits: [0, 2, 3, 7]  # Node ID, Hop latency
 
 payload: "hello world!"
+
+generate_ground_truth_csv: true
+ground_truth_csv_path: "ground_truth.csv"
