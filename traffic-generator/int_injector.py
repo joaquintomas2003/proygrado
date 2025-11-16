@@ -132,8 +132,10 @@ def gen_metadata_field_for_name(name, params, rng=random):
 
     if name == "tx_util":
         alpha = params.get("tx_util_alpha", 3.0)
-        raw = rng.paretovariate(alpha) - 1.0
-        raw = max(0.0, min(raw, 1.0))  # Keep within 0–1
+        while True:
+            raw = rng.paretovariate(alpha) - 1.0
+            if 0.0 <= raw <= 1.0:
+                break
         return int(raw * 100)
 
     if name == "buffer_info":
