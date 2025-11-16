@@ -131,8 +131,10 @@ def gen_metadata_field_for_name(name, params, rng=random):
         return (ing << 32) | eg
 
     if name == "tx_util":
-        # utilization percent (0–100) mapped into 32 bits
-        return rng.randint(0, 100)
+        alpha = params.get("tx_util_alpha", 3.0)
+        raw = rng.paretovariate(alpha) - 1.0
+        raw = max(0.0, min(raw, 1.0))  # Keep within 0–1
+        return int(raw * 100)
 
     if name == "buffer_info":
         # 8 bits buffer ID + 24 bits occupancy
