@@ -10,6 +10,7 @@ INT_UDP_DST_PORT = 5000  # arbitrary INT UDP port
 ORIGINAL_PROTO = 6        # TCP
 INT_TYPE = 1              # 1 = INT-MD
 MAX_INT_NODES = 5
+MAX_FRAME = 1500
 
 # Bit: (Field, Length)
 INSTRUCTION_FIELDS = {
@@ -194,7 +195,8 @@ def inject_int(pkt, cfg, rng, params, int_udp_dst_port):
         orig_dport = pkt[UDP].dport
         # shim stores original dport for sink restoration
         shim = build_int_shim(hop_ml, num_hops, npt=1, orig_udp_dport=orig_dport)
-        orig_payload = bytes(pkt[UDP].payload)
+        max_payload_len = MAX_FRAME - len(eth/IP()/UDP()) - len(shim + md_header + metadata_stack)
+        orig_payload = bytes(pkt[UDP].payload)[:max_payload_len]
 
         int_payload = shim + md_header + metadata_stack + orig_payload
 
@@ -212,7 +214,8 @@ def inject_int(pkt, cfg, rng, params, int_udp_dst_port):
         original_proto = pkt[IP].proto
         shim = build_int_shim(hop_ml, num_hops, npt=2, orig_ip_proto=original_proto)
         # original L4 bytes (transport header + payload)
-        orig_transport_and_payload = bytes(pkt[IP].payload)
+        max_payload_len = MAX_FRAME - len(eth/IP()/UDP()) - len(shim + md_header + metadata_stack)
+        orig_transport_and_payload = bytes(pkt[IP].payload)[:max_payload_len]
 
         # final raw payload for INT
         int_payload = shim + md_header + metadata_stack + orig_transport_and_payload
@@ -332,7 +335,8 @@ def process_trace(cfg):
         if not pkt.haslayer(IP):
             continue
 
-        pkt = truncate_to_64B(pkt)
+        if cfg.get("truncate_64B", False):
+            pkt = truncate_to_64B(pkt)
 
         request_pkt = pkt.copy()
         response_pkt = pkt.copy()

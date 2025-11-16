@@ -2,6 +2,8 @@
 input_pcap: "traces/Anonymized_bras_dataset/BRAS_capture_network-transmission_1.pcap"
 output_pcap: "generated_int.pcap"
 
+truncate_64B: false
+
 int_udp_dst_port: 5000
 
 original_proto: 6  # TCP
