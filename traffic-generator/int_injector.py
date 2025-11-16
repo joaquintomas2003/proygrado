@@ -158,7 +158,12 @@ def generate_metadata_for_hop(node_id, instruction_bitmap, params, rng=random, p
                 metadata += struct.pack("!I", value)
             else:
                 value = gen_metadata_field_for_name(name, params, rng)
-                hop_record[name] = value
+                if name == "queue_info":
+                    queue_id = (value >> 24) & 0xff
+                    queue_occ = value & 0xffffff
+                    hop_record["queue_occupancy"] = queue_occ
+                else:
+                    hop_record[name] = value
                 if size == 4:
                     metadata += struct.pack("!I", value & 0xffffffff)
                 elif size == 8:
