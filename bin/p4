@@ -76,6 +76,8 @@ case "$COMMAND" in
       -c main.c time_utils.c \
       --custom-load-list age_out_me.list \
       --custom-load-me i32.me0 \
+      --custom-load-list age_out_me.list \
+      --custom-load-me i32.me1 \
       -A 52 \
       "${EXTRA_ARGS[@]}"
 

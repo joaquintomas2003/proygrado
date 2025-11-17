@@ -5,7 +5,7 @@
 #include "time_utils.h"
 #include "data_structures.h"
 
-void evict_stale_entries(uint64_t threshold_ns) {
+void evict_stale_entries(uint64_t threshold_ns, uint32_t start_row, uint32_t end_row) {
     __xrw ring_meta ring_meta_read;
     __volatile __addr40 __emem bucket_entry *entry;
     __volatile __addr40 __emem ring_meta *ring_info;
@@ -18,7 +18,7 @@ void evict_stale_entries(uint64_t threshold_ns) {
     uint32_t key_reset[4] = {0,0,0,0};
     uint32_t k;
 
-    for (i = 0; i < FLOWCACHE_ROWS; i++) {
+    for (i = start_row; i < end_row; i++) {
       semaphore_down(&global_semaphores[i]);
         // Determine ring index
         ring_index = i & (NUM_RINGS - 1);
@@ -27,7 +27,7 @@ void evict_stale_entries(uint64_t threshold_ns) {
             last_ts = entry->last_update_timestamp;
 
             if (entry->packet_count != 0 && get_time_diff_ns(last_ts) > threshold_ns) {
-                
+
                 semaphore_down(&ring_buffer_sem_G[ring_index]);
                   ring_info = &ring_G[ring_index];
 
@@ -139,17 +139,26 @@ void evict_stale_entries(uint64_t threshold_ns) {
     }
 }
 
-__export __mem40 uint32_t timers = 0;
-
 void main(void)
 {
-    // Only one thread launches the periodic eviction timer
-    if (ctx() == 0 && timers == 0) {
-        timers++;
+    uint32_t me_num, half;
+    uint32_t start_row, end_row;
+    me_num = (_ME() & 0xF) - 4;
+    half = FLOWCACHE_ROWS / 2;
 
+    if (me_num == 0) {
+        start_row = 0;
+        end_row   = half;
+    } else {
+        start_row = half;
+        end_row   = FLOWCACHE_ROWS;
+    }
+
+    // Only one thread launches the periodic eviction timer
+    if (ctx() == 0) {
         while (1) {
             // Call the eviction routine
-            evict_stale_entries(AGE_THRESHOLD_NS);
+            evict_stale_entries(AGE_THRESHOLD_NS, start_row, end_row);
         }
     }
 }
