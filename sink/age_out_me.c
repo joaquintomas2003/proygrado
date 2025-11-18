@@ -4,7 +4,6 @@
 #include <nfp/mem_atomic.h>
 #include "time_utils.h"
 #include "data_structures.h"
-volatile __emem __export uint32_t cant_paquetes_age_out = 0;
 
 void evict_stale_entries(uint64_t threshold_ns) {
     __xrw ring_meta ring_meta_read;
@@ -28,7 +27,6 @@ void evict_stale_entries(uint64_t threshold_ns) {
             last_ts = entry->last_update_timestamp;
 
             if (entry->packet_count != 0 && get_time_diff_ns(last_ts) > threshold_ns) {
-                mem_incr32(&cant_paquetes_age_out);
                 semaphore_down(&ring_buffer_sem_G[ring_index]);
                   ring_info = &ring_G[ring_index];
 
