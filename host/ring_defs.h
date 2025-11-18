@@ -3,11 +3,10 @@
 
 #include <stdint.h>
 
-#define FLOWCACHE_ROWS (1 << 10)
 #define BUCKET_SIZE 12
 #define MAX_INT_NODES 5
 #define NUM_RINGS 8
-#define RING_SIZE (1 << 16)
+#define RING_SIZE (1 << 17)
 #define BATCH_SIZE 10
 
 typedef struct int_metric_sample {
@@ -45,8 +44,8 @@ typedef struct ring_list {
 } ring_list;
 
 typedef struct ring_meta {
-    uint32_t write_pointer;
     uint32_t read_pointer;
+    uint32_t write_pointer;
     uint32_t full;
     uint32_t _padding;
 } ring_meta;

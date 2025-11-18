@@ -7,13 +7,14 @@
 
 void evict_stale_entries(uint64_t threshold_ns, uint32_t start_row, uint32_t end_row) {
     __xrw ring_meta ring_meta_read;
+    __xrw uint32_t wp_read;
+    // __xrw uint32_t rp_read;
     __volatile __addr40 __emem bucket_entry *entry;
     __volatile __addr40 __emem ring_meta *ring_info;
     __volatile __addr40 __emem bucket_entry *r_entry;
     uint32_t wp, rp, f;
     uint32_t i, j, ring_index;
     uint64_t last_ts;
-    __xrw uint64_t last_ts_xrw;
     uint32_t zero = 0;
     uint32_t key_reset[4] = {0,0,0,0};
     uint32_t k;
@@ -31,12 +32,15 @@ void evict_stale_entries(uint64_t threshold_ns, uint32_t start_row, uint32_t end
                 semaphore_down(&ring_buffer_sem_G[ring_index]);
                   ring_info = &ring_G[ring_index];
 
-                  mem_read_atomic(&ring_meta_read, (__mem void *)ring_info, sizeof(ring_meta_read));
-                  wp = ring_meta_read.write_pointer;
-                  rp = ring_meta_read.read_pointer;
-                  f  = ring_meta_read.full;
+                  mem_read_atomic(&wp_read, (__mem void *)&ring_info->write_pointer, sizeof(wp_read));
+                  wp = wp_read;
+                  // mem_read_atomic(&rp_read, (__mem void *)&ring_info->read_pointer, sizeof(rp_read));
+                  // mem_read_atomic(&ring_meta_read, (__mem void *)ring_info, sizeof(ring_meta_read));
+                  // wp = ring_meta_read.write_pointer;
+                  // rp = ring_meta_read.read_pointer;
+                  // f  = ring_meta_read.full;
 
-                  if (f == 0) {
+                  // if (f == 0) {
                     // Get ring entry pointer
                     r_entry = &ring_buffer_G[ring_index].entry[wp];
 
@@ -107,7 +111,7 @@ void evict_stale_entries(uint64_t threshold_ns, uint32_t start_row, uint32_t end
 
                     // Advance write pointer
                     wp = (wp + 1) & (RING_SIZE - 1);
-                    if (wp == rp) f = 1;
+                    // if (wp == rp) f = 1;
 
                     // Free the bucket
                     {
@@ -124,14 +128,16 @@ void evict_stale_entries(uint64_t threshold_ns, uint32_t start_row, uint32_t end
                           sizeof(key_reset_xrw));
                     }
 
-                  }
+                  // }
                   // Update ring metadata
-                  ring_meta_read.write_pointer = wp;
-                  ring_meta_read.full          = f;
-                  ring_meta_read.read_pointer  = rp;
-                  mem_write_atomic(&ring_meta_read,
-                                  (__mem void *)ring_info,
-                                  sizeof(ring_meta_read));
+                  wp_read = wp;
+                  // ring_meta_read.write_pointer = wp;
+                  // ring_meta_read.full          = f;
+                  // ring_meta_read.read_pointer  = rp;
+                  // mem_write_atomic(&ring_meta_read,
+                  //                 (__mem void *)ring_info,
+                  //                 sizeof(ring_meta_read));
+                  mem_write_atomic(&wp_read, (__mem void *)&ring_info->write_pointer, sizeof(wp_read));
                 semaphore_up(&ring_buffer_sem_G[ring_index]);
             }
         }

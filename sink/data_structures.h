@@ -6,7 +6,7 @@
 #define IP_PROTO_UDP 0x11
 #define IP_PROTO_TCP 0x6
 #define NUM_RINGS 8
-#define RING_SIZE (1 << 16)
+#define RING_SIZE (1 << 17)
 
 #define x1 1                        //2^0
 #define x2 x1, x1                   //2^1
@@ -80,8 +80,8 @@ typedef struct event_ring_list {
 } event_ring_list;
 
 typedef struct ring_meta {
-  uint32_t write_pointer;
   uint32_t read_pointer;
+  uint32_t write_pointer;
   uint32_t full;
   uint32_t _padding;
 } ring_meta;

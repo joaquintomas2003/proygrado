@@ -245,11 +245,11 @@ int main(int argc, char *argv[]) {
 
             /* Advance read pointer if we consumed anything */
             if (j > 0) {
-                if (full) full = 0;
+                // if (full) full = 0;
                 current_ring_meta.write_pointer = wp;
                 current_ring_meta.read_pointer  = rp;
                 current_ring_meta.full          = full;
-                if (nfp_cpp_area_write(area_ring_metas_G[i], 0, &current_ring_meta, sizeof(ring_meta)) < 0) {
+                if (nfp_cpp_area_write(area_ring_metas_G[i], 0, &current_ring_meta.read_pointer, 4) < 0) {
                     fprintf(stderr, "Error: Failed to write updated ring meta for ring %d (%s)\n", i + 1, strerror(errno));
                     ret = 1;
                     goto exit_join_I_workers;
