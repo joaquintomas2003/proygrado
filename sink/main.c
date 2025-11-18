@@ -84,6 +84,8 @@ static __inline int _absdiff(uint32_t a, uint32_t b) {
   return (a > b) ? (a - b) : (b - a);
 }
 
+volatile __emem __export uint32_t cant_paquetes = 0;
+
 int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_data) {
   // Declare the bucket entry variables
   __addr40 __emem bucket_entry *entry = 0;
@@ -359,6 +361,6 @@ save_entry:
                       EVENT_C_E2E | METRIC_HOP,
                       event_timestamp);
   }
-
+  mem_incr32(&cant_paquetes);
   return PIF_PLUGIN_RETURN_FORWARD;
 }
