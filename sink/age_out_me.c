@@ -27,7 +27,6 @@ void evict_stale_entries(uint64_t threshold_ns) {
             last_ts = entry->last_update_timestamp;
 
             if (entry->packet_count != 0 && get_time_diff_ns(last_ts) > threshold_ns) {
-                
                 semaphore_down(&ring_buffer_sem_G[ring_index]);
                   ring_info = &ring_G[ring_index];
 

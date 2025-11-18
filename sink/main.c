@@ -99,7 +99,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   __xwrite int_metric_sample sample;
   __xwrite uint32_t key_reset[4] = {0, 0, 0, 0};
   __xwrite uint32_t key[4];
-  __xwrite uint32_t packet_count_lru;
+  __xrw uint32_t packet_count_lru;
   __xwrite uint32_t request_meta_lru;
   __xwrite uint32_t nodes_present;
   __xwrite uint32_t request_meta;
@@ -265,6 +265,7 @@ save_entry:
 
   // Increment the packet count
   mem_incr32(&entry->packet_count);
+  mem_read_atomic(&packet_count_lru, &entry->packet_count, sizeof(packet_count_lru));
 
   nodes_present = scalars->metadata__nodes_present;
   cant_nodes    = scalars->metadata__nodes_present;
