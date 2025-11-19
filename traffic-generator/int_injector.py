@@ -95,7 +95,7 @@ def gen_metadata_field_for_name(name, params, rng=random):
         # hop latency in microseconds
         return exp_int_sample(
             params.get("hop_latency_mean", 200.0),
-            params.get("hop_latency_max", 5000),
+            params.get("hop_latency_max", 800),
             rng,
         )
 
@@ -129,8 +129,12 @@ def gen_metadata_field_for_name(name, params, rng=random):
         return (ing << 32) | eg
 
     if name == "tx_util":
-        # utilization percent (0–100) mapped into 32 bits
-        return rng.randint(0, 100)
+        alpha = params.get("tx_util_alpha", 3.0)
+        while True:
+            raw = rng.paretovariate(alpha) - 1.0
+            if 0.0 <= raw <= 1.0:
+                break
+        return int(raw * 100)
 
     if name == "buffer_info":
         # 8 bits buffer ID + 24 bits occupancy
