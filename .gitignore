@@ -10,6 +10,8 @@ transit_hop/*.obj
 wire/out/
 wire/pifout/
 Makefile-nfp4build
+evaluation/*.txt
+evaluation/*.csv
 
 traffic-generator/traces/*
 !traffic-generator/traces/.keep

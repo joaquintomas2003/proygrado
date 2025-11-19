@@ -84,6 +84,19 @@ static __inline int _absdiff(uint32_t a, uint32_t b) {
   return (a > b) ? (a - b) : (b - a);
 }
 
+static __inline void _save_global_sample(uint32_t latency_value) {
+  __xrw    uint32_t current_index;
+  __xwrite uint32_t new_index;
+  __xwrite uint32_t latency_wr;
+  semaphore_down(&latency_semaphore);
+    mem_read_atomic(&current_index, &latency__index, sizeof(current_index));
+    latency_wr = latency_value;
+    mem_write_atomic(&latency_wr, &latency_array[current_index].value, sizeof(latency_wr));
+    new_index = current_index + 1;
+    mem_write_atomic(&new_index, &latency__index, sizeof(new_index));
+  semaphore_up(&latency_semaphore);
+}
+
 int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_data) {
   // Declare the bucket entry variables
   __addr40 __emem bucket_entry *entry = 0;
@@ -106,6 +119,11 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   __xwrite uint64_t first_packet_timestamp_lru;
   __xwrite uint64_t timestamp;
   __xwrite uint64_t update_timestamp;
+  __xrw    uint32_t latency;
+  __xrw    uint64_t ts_evict_inicio = 0;
+  __xrw    uint64_t ts_evict_fin = 0;
+  __xrw    uint64_t ts_inicio = 0;
+  __xrw    uint64_t ts_fin = 0;
 
   int      i, k;
   uint32_t hash_key[4];
@@ -346,7 +364,7 @@ save_entry:
   ts_inicio = ticks_to_ns(ts_evict_inicio);
   ts_fin    = ticks_to_ns(ts_evict_fin);
   latency = ts_fin - ts_inicio;
-  latency_array[get_global_thread_id()].value = latency;
+  _save_global_sample(latency);
   semaphore_up(&global_semaphores[hash_value]);
 
   /* === End-to-end hop-latency events (T/C) === */
