@@ -16,7 +16,7 @@ import statistics
 from typing import List, Tuple
 
 INPUT_CSV = "salida.csv"
-OUTLIER_PERCENTILE = 97.0  # set to 99.0 for 99th percentile; adjust as needed
+OUTLIER_PERCENTILE = 90.0  # set to 99.0 for 99th percentile; adjust as needed
 USE_ZSCORE = True          # set to False to disable z-score detection
 ZSCORE_THRESHOLD = 2.5     # threshold for aggressive z-score method
 
@@ -57,29 +57,6 @@ def percentile(sorted_data: List[int], p: float) -> float:
     upper_val = sorted_data[upper_idx]
     return lower_val + fraction * (upper_val - lower_val)
 
-
-def zscore_outliers(data: List[int], threshold: float = 2.5) -> Tuple[float, float, List[int], List[int]]:
-    """
-    Return (mean, std, low_outliers, high_outliers) using z-score threshold.
-    """
-    if len(data) < 2:
-        return (float('nan'), float('nan'), [], [])
-    mean = statistics.mean(data)
-    std = statistics.stdev(data)
-    low = []
-    high = []
-    for x in data:
-        if std == 0:
-            z = 0.0
-        else:
-            z = (x - mean) / std
-        if z > threshold:
-            high.append(x)
-        elif z < -threshold:
-            low.append(x)
-    return mean, std, low, high
-
-
 def main():
     print("Loading data from", INPUT_CSV)
     data = load_values()
@@ -106,11 +83,11 @@ def main():
     print(f"Count: {n}")
     print(f"Min: {minimum}")
     print(f"Max: {maximum}")
-    print(f"Mean: {mean}")
+    print(f"Mean: {mean:.0f}")
     print(f"Median: {median}")
     print(f"Q1: {q1}")
     print(f"Q3: {q3}")
-    print(f"Std Dev: {std:.6f}")
+    print(f"Std Dev: {std:.0f}")
 
     print("\n=== Percentile-based Outliers ===")
     print(f"Outlier percentile: {OUTLIER_PERCENTILE}th")
