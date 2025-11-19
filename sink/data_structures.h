@@ -103,6 +103,41 @@ volatile __emem __export uint32_t global_semaphores[FLOWCACHE_ROWS];
 volatile __emem __export uint32_t ring_buffer_sem_G[NUM_RINGS] = {x8};
 volatile __emem __export uint32_t ring_buffer_sem_I[NUM_RINGS] = {x8};
 
+#define NUM_ISLANDS      5
+#define BASE_ISLAND      32
+#define MEs_PER_ISLAND   12
+#define THREADS_PER_ME   4
+#define NUM_THREADS      (NUM_ISLANDS * MEs_PER_ISLAND * THREADS_PER_ME)  // 240
+
+volatile __export __emem uint32_t latency_array[NUM_THREADS] = {0ULL};
+
+volatile __addr40 __emem __export uint64_t ts_evict_inicio = 0;
+volatile __addr40 __emem __export uint64_t ts_evict_fin = 0;
+
+volatile __addr40 __emem __export uint64_t ts_inicio = 0;
+volatile __addr40 __emem __export uint64_t ts_fin = 0;
+volatile __addr40 __emem __export uint64_t latency = 0xFFFFFFFFFFFFFFFFULL;
+
+static __forceinline uint32_t get_global_thread_id(void)
+{
+    /* Extract island and ME from encoded _ME() */
+    uint32_t me_raw = _ME();
+
+    uint32_t island =  me_raw >> 4;          // 32..36
+    uint32_t me     = (me_raw & 0xF) - 4;    // 0..11
+
+    /* Compact thread ID: __ctx() = 0,2,4,6 → 0..3 */
+    uint32_t thread = __ctx() >> 1;          // 0..3
+
+    /* Produce unique contiguous thread index */
+    uint32_t global_thread_id =
+        (island - BASE_ISLAND) * (MEs_PER_ISLAND * THREADS_PER_ME) +
+        me                       * THREADS_PER_ME +
+        thread;
+
+    return global_thread_id;                 // 0..239
+}
+
 static __inline void semaphore_down(volatile __declspec(mem addr40) void * addr) {
   unsigned int addr_hi, addr_lo;
   __declspec(read_write_reg) int xfer;

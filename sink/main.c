@@ -84,13 +84,6 @@ static __inline int _absdiff(uint32_t a, uint32_t b) {
   return (a > b) ? (a - b) : (b - a);
 }
 
-volatile __addr40 __emem __export uint64_t ts_evict_inicio = 0;
-volatile __addr40 __emem __export uint64_t ts_evict_fin = 0;
-
-volatile __addr40 __emem __export uint64_t ts_inicio = 0;
-volatile __addr40 __emem __export uint64_t ts_fin = 0;
-volatile __addr40 __emem __export uint64_t latency = 0xFFFFFFFFFFFFFFFFULL;
-
 int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_data) {
   // Declare the bucket entry variables
   __addr40 __emem bucket_entry *entry = 0;
@@ -198,8 +191,6 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
     }
   }
   timestamp = evict_selected ? aged_ts : min_ts;
-
-  ts_evict_inicio = me_tsc_read(); 
   // If we reached the end of the bucket without finding a match
   if (i == BUCKET_SIZE || evict_selected) {
     semaphore_down(&ring_buffer_sem_G[ring_index]);
@@ -257,13 +248,9 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
       mem_write_atomic(&ring_meta_read, &ring_G[ring_index], sizeof(ring_meta_read));
     semaphore_up(&ring_buffer_sem_G[ring_index]);
   }
-  ts_evict_fin = me_tsc_read();
 
-  ts_inicio = ticks_to_ns(ts_evict_inicio);
-  ts_fin    = ticks_to_ns(ts_evict_fin);
-  latency = ts_fin - ts_inicio;
-  
 save_entry:
+  ts_evict_inicio = me_tsc_read(); 
   // Metadata pointers for nodes
   node_metadata_ptrs[0] = headers + PIF_PARREP_ingress__node1_metadata_OFF_LW;
   node_metadata_ptrs[1] = headers + PIF_PARREP_ingress__node2_metadata_OFF_LW;
@@ -355,6 +342,11 @@ save_entry:
     /* We can write after the IF without problem */
     mem_write_atomic(&sample, &entry->int_metric_info_value.latest[k], sizeof(sample));
   }
+  ts_evict_fin = me_tsc_read();
+  ts_inicio = ticks_to_ns(ts_evict_inicio);
+  ts_fin    = ticks_to_ns(ts_evict_fin);
+  latency = ts_fin - ts_inicio;
+  latency_array[get_global_thread_id()] = latency;
   semaphore_up(&global_semaphores[hash_value]);
 
   /* === End-to-end hop-latency events (T/C) === */
