@@ -109,7 +109,15 @@ volatile __emem __export uint32_t ring_buffer_sem_I[NUM_RINGS] = {x8};
 #define THREADS_PER_ME   4
 #define NUM_THREADS      (NUM_ISLANDS * MEs_PER_ISLAND * THREADS_PER_ME)  // 240
 
-volatile __export __emem uint32_t latency_array[NUM_THREADS] = {0ULL};
+typedef struct latency_record {
+  uint32_t value;
+  uint32_t _padding1;
+  uint32_t _padding2;
+  uint32_t _padding3;
+} latency_record;
+
+
+volatile __export __emem latency_record latency_array[NUM_THREADS] = {0ULL};
 
 volatile __addr40 __emem __export uint64_t ts_evict_inicio = 0;
 volatile __addr40 __emem __export uint64_t ts_evict_fin = 0;
@@ -117,6 +125,7 @@ volatile __addr40 __emem __export uint64_t ts_evict_fin = 0;
 volatile __addr40 __emem __export uint64_t ts_inicio = 0;
 volatile __addr40 __emem __export uint64_t ts_fin = 0;
 volatile __addr40 __emem __export uint64_t latency = 0xFFFFFFFFFFFFFFFFULL;
+
 
 static __forceinline uint32_t get_global_thread_id(void)
 {

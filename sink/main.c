@@ -291,16 +291,16 @@ save_entry:
     metric_id   = METRIC_HOP;
     hop_latency = node->hop_latency;
 
-    if (hop_latency >= THR_T_SWITCH[0]) {
-      _push_event_to_RI(ring_index,
-                        node->node_id,
-                        hop_latency,
-                        EVENT_T_SWITCH | metric_id,
-                        event_timestamp);
-    }
+    // if (hop_latency >= THR_T_SWITCH[0]) {
+    //   _push_event_to_RI(ring_index,
+    //                     node->node_id,
+    //                     hop_latency,
+    //                     EVENT_T_SWITCH | metric_id,
+    //                     event_timestamp);
+    // }
 
     /* === Maintain end-to-end current hop sum as we go === */
-    e2e_curr_hop += hop_latency;
+    // e2e_curr_hop += hop_latency;
 
     /* Write latest sample */
     sample.node_id             = node->node_id;
@@ -314,17 +314,17 @@ save_entry:
       mem_read_atomic(&prev_latest, &entry->int_metric_info_value.latest[k], sizeof(prev_latest));
 
       /* Build the previous end-to-end hop sum before we overwrite latest[] */
-      e2e_prev_hop += prev_latest.hop_latency;
+      // e2e_prev_hop += prev_latest.hop_latency;
 
       /* === Per-switch C-events on HOP === */
-      absdiff = _absdiff(hop_latency, prev_latest.hop_latency);
-      if (absdiff >= THR_C_SWITCH[0]) {
-        _push_event_to_RI(ring_index,
-                          node->node_id,
-                          absdiff,
-                          EVENT_C_SWITCH | metric_id,
-                          event_timestamp);
-      }
+      // absdiff = _absdiff(hop_latency, prev_latest.hop_latency);
+      // if (absdiff >= THR_C_SWITCH[0]) {
+      //   _push_event_to_RI(ring_index,
+      //                     node->node_id,
+      //                     absdiff,
+      //                     EVENT_C_SWITCH | metric_id,
+      //                     event_timestamp);
+      // }
       mem_read_atomic(&avg_sample, &entry->int_metric_info_value.average[k], sizeof(avg_sample));
 
       avg_sample.node_id              = node->node_id;
@@ -337,7 +337,7 @@ save_entry:
       mem_write_atomic(&sample, &entry->int_metric_info_value.average[k], sizeof(sample));
 
       /* This way, we wont trigger a C-event e2e */
-      e2e_prev_hop = e2e_curr_hop;
+      // e2e_prev_hop = e2e_curr_hop;
     }
     /* We can write after the IF without problem */
     mem_write_atomic(&sample, &entry->int_metric_info_value.latest[k], sizeof(sample));
@@ -346,25 +346,25 @@ save_entry:
   ts_inicio = ticks_to_ns(ts_evict_inicio);
   ts_fin    = ticks_to_ns(ts_evict_fin);
   latency = ts_fin - ts_inicio;
-  latency_array[get_global_thread_id()] = latency;
+  latency_array[get_global_thread_id()].value = latency;
   semaphore_up(&global_semaphores[hash_value]);
 
   /* === End-to-end hop-latency events (T/C) === */
-  if (e2e_curr_hop >= THR_T_E2E[0]) {
-    _push_event_to_RI(ring_index,
-                      E2E_SWITCH_ID,
-                      e2e_curr_hop,
-                      EVENT_T_E2E | METRIC_HOP,
-                      event_timestamp);
-  }
-  absdiff = _absdiff(e2e_curr_hop, e2e_prev_hop);
-  if (absdiff >= THR_C_E2E[0]) {
-    _push_event_to_RI(ring_index,
-                      E2E_SWITCH_ID,
-                      absdiff,
-                      EVENT_C_E2E | METRIC_HOP,
-                      event_timestamp);
-  }
+  // if (e2e_curr_hop >= THR_T_E2E[0]) {
+  //   _push_event_to_RI(ring_index,
+  //                     E2E_SWITCH_ID,
+  //                     e2e_curr_hop,
+  //                     EVENT_T_E2E | METRIC_HOP,
+  //                     event_timestamp);
+  // }
+  // absdiff = _absdiff(e2e_curr_hop, e2e_prev_hop);
+  // if (absdiff >= THR_C_E2E[0]) {
+  //   _push_event_to_RI(ring_index,
+  //                     E2E_SWITCH_ID,
+  //                     absdiff,
+  //                     EVENT_C_E2E | METRIC_HOP,
+  //                     event_timestamp);
+  // }
 
   return PIF_PLUGIN_RETURN_FORWARD;
 }
