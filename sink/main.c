@@ -271,6 +271,7 @@ evict_flow:
 
 save_entry:
   // Metadata pointers for nodes
+  // ts_evict_inicio = me_tsc_read();
   node_metadata_ptrs[0] = headers + PIF_PARREP_ingress__node1_metadata_OFF_LW;
   node_metadata_ptrs[1] = headers + PIF_PARREP_ingress__node2_metadata_OFF_LW;
   node_metadata_ptrs[2] = headers + PIF_PARREP_ingress__node3_metadata_OFF_LW;
@@ -337,9 +338,11 @@ save_entry:
     /* We can write after the IF without problem */
     mem_write_atomic(&sample, &entry->int_metric_info_value.latest[k], sizeof(sample));
   }
+  // ts_evict_fin = me_tsc_read();
+  // _save_global_sample(ts_evict_inicio, ts_evict_fin);
   semaphore_up(&global_semaphores[hash_value]);
 
-  // ts_evict_inicio = me_tsc_read();
+  ts_evict_inicio = me_tsc_read();
   for (k = 0; k < cant_nodes && k < MAX_INT_NODES; k++) {
     node = (__lmem struct pif_header_ingress__node1_metadata *)node_metadata_ptrs[k];
     /* === Per-switch T-events on HOP === */
@@ -385,8 +388,8 @@ save_entry:
                       event_timestamp);
   }
 
-  // ts_evict_fin = me_tsc_read();
-  // _save_global_sample(ts_evict_inicio, ts_evict_fin);
+  ts_evict_fin = me_tsc_read();
+  _save_global_sample(ts_evict_inicio, ts_evict_fin);
 
   return PIF_PLUGIN_RETURN_FORWARD;
 }
