@@ -84,13 +84,13 @@ static __inline int _absdiff(uint32_t a, uint32_t b) {
   return (a > b) ? (a - b) : (b - a);
 }
 
-static __inline void _save_global_sample(uint32_t latency_value) {
+static __inline void _save_global_sample(uint64_t ts_inicio, uint64_t ts_fin) {
   __xrw    uint32_t current_index;
   __xwrite uint32_t new_index;
   __xwrite uint32_t latency_wr;
   semaphore_down(&latency_semaphore);
     mem_read_atomic(&current_index, &latency__index, sizeof(current_index));
-    latency_wr = latency_value;
+    latency_wr = ticks_to_ns(ts_fin) - ticks_to_ns(ts_inicio);;
     mem_write_atomic(&latency_wr, &latency_array[current_index].value, sizeof(latency_wr));
     new_index = current_index + 1;
     mem_write_atomic(&new_index, &latency__index, sizeof(new_index));
@@ -119,11 +119,6 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   __xwrite uint64_t first_packet_timestamp_lru;
   __xwrite uint64_t timestamp;
   __xwrite uint64_t update_timestamp;
-  __xrw    uint32_t latency;
-  __xrw    uint64_t ts_evict_inicio = 0;
-  __xrw    uint64_t ts_evict_fin = 0;
-  __xrw    uint64_t ts_inicio = 0;
-  __xrw    uint64_t ts_fin = 0;
 
   int      i, k;
   uint32_t hash_key[4];
@@ -137,6 +132,11 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   uint32_t absdiff;
   uint32_t metric_id;
   uint32_t hop_latency;
+
+  /* Comment this if no analysys is being done */
+  uint64_t ts_evict_inicio = 0;
+  uint64_t ts_evict_fin = 0;
+
 
   uint64_t min_ts = 0xFFFFFFFFFFFFFFFFULL;
   uint64_t aged_ts;
@@ -209,8 +209,6 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
     }
   }
 evict_flow:
-
-  ts_evict_inicio = me_tsc_read(); 
   timestamp = evict_selected ? aged_ts : min_ts;
   // If we reached the end of the bucket without finding a match
   if (i == BUCKET_SIZE || evict_selected) {
@@ -267,16 +265,13 @@ evict_flow:
       ring_meta_read.full          = f;
       ring_meta_read.read_pointer  = rp;
       mem_write_atomic(&ring_meta_read, &ring_G[ring_index], sizeof(ring_meta_read));
-      ts_evict_fin = me_tsc_read();
-      ts_inicio = ticks_to_ns(ts_evict_inicio);
-      ts_fin    = ticks_to_ns(ts_evict_fin);
-      latency = ts_fin - ts_inicio;
-      _save_global_sample(latency);
     semaphore_up(&ring_buffer_sem_G[ring_index]);
-    
   }
 
 save_entry:
+ts_evict_inicio = me_tsc_read();
+ts_evict_fin = me_tsc_read();
+_save_global_sample(ts_evict_inicio, ts_evict_fin);
   // Metadata pointers for nodes
   node_metadata_ptrs[0] = headers + PIF_PARREP_ingress__node1_metadata_OFF_LW;
   node_metadata_ptrs[1] = headers + PIF_PARREP_ingress__node2_metadata_OFF_LW;
