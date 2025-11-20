@@ -12,9 +12,9 @@ wire/pifout/
 Makefile-nfp4build
 evaluation/*.txt
 evaluation/*.csv
-evaluation/eviction/
-evaluation/event/
-evaluation/entry_update/
+evaluation/eviction/*.csv
+evaluation/event/*.csv
+evaluation/entry_update/*.csv
 
 traffic-generator/traces/*
 !traffic-generator/traces/.keep
