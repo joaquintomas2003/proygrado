@@ -269,9 +269,8 @@ evict_flow:
   }
 
 save_entry:
-ts_evict_inicio = me_tsc_read();
-ts_evict_fin = me_tsc_read();
-_save_global_sample(ts_evict_inicio, ts_evict_fin);
+  // if (entry->packet_count > 0)  ts_evict_inicio = me_tsc_read();
+  ts_evict_inicio = me_tsc_read();
   // Metadata pointers for nodes
   node_metadata_ptrs[0] = headers + PIF_PARREP_ingress__node1_metadata_OFF_LW;
   node_metadata_ptrs[1] = headers + PIF_PARREP_ingress__node2_metadata_OFF_LW;
@@ -286,7 +285,9 @@ _save_global_sample(ts_evict_inicio, ts_evict_fin);
 
   // Increment the packet count
   mem_incr32(&entry->packet_count);
+  
   mem_read_atomic(&packet_count_lru, &entry->packet_count, sizeof(packet_count_lru));
+  
 
   nodes_present = scalars->metadata__nodes_present;
   cant_nodes    = scalars->metadata__nodes_present;
@@ -354,6 +355,7 @@ _save_global_sample(ts_evict_inicio, ts_evict_fin);
       avg_sample.egress_interface_tx = (avg_sample.egress_interface_tx * (entry->packet_count - 1) + node->egress_interface_tx) / entry->packet_count;
 
       mem_write_atomic(&avg_sample, &entry->int_metric_info_value.average[k], sizeof(avg_sample));
+      
     } else {
       mem_write_atomic(&sample, &entry->int_metric_info_value.average[k], sizeof(sample));
 
@@ -363,7 +365,11 @@ _save_global_sample(ts_evict_inicio, ts_evict_fin);
     /* We can write after the IF without problem */
     mem_write_atomic(&sample, &entry->int_metric_info_value.latest[k], sizeof(sample));
   }
-
+  // if (entry->packet_count > 1) {
+    ts_evict_fin = me_tsc_read();
+  _save_global_sample(ts_evict_inicio, ts_evict_fin);
+  // }
+  
   semaphore_up(&global_semaphores[hash_value]);
 
   /* === End-to-end hop-latency events (T/C) === */
