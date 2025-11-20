@@ -112,7 +112,7 @@ typedef struct latency_record {
   uint32_t _padding3;
 } latency_record;
 
-volatile __export __emem latency_record latency_array[SAMPLE_ARRAY_SIZE];
+__export __emem latency_record latency_array[SAMPLE_ARRAY_SIZE];
 __export __emem uint32_t latency__index = 0;
 volatile __emem __export uint32_t latency_semaphore = 1;
 

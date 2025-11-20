@@ -107,12 +107,13 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   __xrw    ring_meta ring_meta_read;
   __xrw    int_metric_sample avg_sample;
 
-  __xread  int_metric_sample prev_latest;
+  __xrw    uint32_t prev_latest;
+  __xrw    uint32_t prev_latest_buf[MAX_INT_NODES];
 
   __xwrite int_metric_sample sample;
   __xwrite uint32_t key_reset[4] = {0, 0, 0, 0};
   __xwrite uint32_t key[4];
-  __xrw uint32_t packet_count_lru;
+  __xrw    uint32_t packet_count;
   __xwrite uint32_t request_meta_lru;
   __xwrite uint32_t nodes_present;
   __xwrite uint32_t request_meta;
@@ -130,7 +131,6 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   uint32_t cant_nodes;
   uint32_t e2e_prev_hop = 0, e2e_curr_hop = 0;
   uint32_t absdiff;
-  uint32_t metric_id;
   uint32_t hop_latency;
 
   /* Comment this if no analysys is being done */
@@ -228,12 +228,12 @@ evict_flow:
         key[2] = victim_entry->key[2];
         key[3] = victim_entry->key[3];
 
-        packet_count_lru           = victim_entry->packet_count;
+        packet_count           = victim_entry->packet_count;
         first_packet_timestamp_lru = victim_entry->first_packet_timestamp;
         request_meta_lru           = victim_entry->request_meta;
 
         mem_write_atomic(key, &ring_entry->key, sizeof(key));
-        mem_write_atomic(&packet_count_lru, &ring_entry->packet_count, sizeof(packet_count_lru));
+        mem_write_atomic(&packet_count, &ring_entry->packet_count, sizeof(packet_count));
         mem_write_atomic(&first_packet_timestamp_lru, &ring_entry->first_packet_timestamp, sizeof(first_packet_timestamp_lru));
         mem_write_atomic(&timestamp, &ring_entry->last_update_timestamp, sizeof(timestamp));
 
@@ -265,12 +265,11 @@ evict_flow:
       ring_meta_read.full          = f;
       ring_meta_read.read_pointer  = rp;
       mem_write_atomic(&ring_meta_read, &ring_G[ring_index], sizeof(ring_meta_read));
+
     semaphore_up(&ring_buffer_sem_G[ring_index]);
   }
 
 save_entry:
-  // if (entry->packet_count > 0)  ts_evict_inicio = me_tsc_read();
-  ts_evict_inicio = me_tsc_read();
   // Metadata pointers for nodes
   node_metadata_ptrs[0] = headers + PIF_PARREP_ingress__node1_metadata_OFF_LW;
   node_metadata_ptrs[1] = headers + PIF_PARREP_ingress__node2_metadata_OFF_LW;
@@ -285,15 +284,12 @@ save_entry:
 
   // Increment the packet count
   mem_incr32(&entry->packet_count);
-  
-  mem_read_atomic(&packet_count_lru, &entry->packet_count, sizeof(packet_count_lru));
-  
-
+  mem_read_atomic(&packet_count, &entry->packet_count, sizeof(packet_count));
   nodes_present = scalars->metadata__nodes_present;
   cant_nodes    = scalars->metadata__nodes_present;
 
   // If this is the first packet for this flow, initialize the entry
-  if (entry->packet_count == 1) {
+  if (packet_count == 1) {
     key[0] = hash_key[0]; key[1] = hash_key[1]; key[2] = hash_key[2]; key[3] = hash_key[3];
     mem_write_atomic(key, entry->key, sizeof(key));
     mem_write_atomic(&nodes_present, &entry->int_metric_info_value.node_count, sizeof(nodes_present));
@@ -308,21 +304,9 @@ save_entry:
   for (k = 0; k < cant_nodes && k < MAX_INT_NODES; k++) {
     node = (__lmem struct pif_header_ingress__node1_metadata *)node_metadata_ptrs[k];
 
-    /* NOTE: We control C-events when there is more than one packet */
-    /* === Per-switch T-events on HOP === */
-    metric_id   = METRIC_HOP;
-    hop_latency = node->hop_latency;
-
-    // if (hop_latency >= THR_T_SWITCH[0]) {
-    //   _push_event_to_RI(ring_index,
-    //                     node->node_id,
-    //                     hop_latency,
-    //                     EVENT_T_SWITCH | metric_id,
-    //                     event_timestamp);
-    // }
-
     /* === Maintain end-to-end current hop sum as we go === */
-    // e2e_curr_hop += hop_latency;
+    hop_latency  = node->hop_latency;
+    e2e_curr_hop += hop_latency;
 
     /* Write latest sample */
     sample.node_id             = node->node_id;
@@ -330,64 +314,79 @@ save_entry:
     sample.queue_occupancy     = node->queue_occupancy;
     sample.egress_interface_tx = node->egress_interface_tx;
 
-    if (entry->packet_count > 1) {
-
+    if (packet_count > 1) {
       /* Read previous latest BEFORE overwriting, for C-events */
-      mem_read_atomic(&prev_latest, &entry->int_metric_info_value.latest[k], sizeof(prev_latest));
-
+      mem_read_atomic(&prev_latest, &entry->int_metric_info_value.latest[k].hop_latency, sizeof(prev_latest));
+      prev_latest_buf[k] = prev_latest;
       /* Build the previous end-to-end hop sum before we overwrite latest[] */
-      // e2e_prev_hop += prev_latest.hop_latency;
-
-      /* === Per-switch C-events on HOP === */
-      // absdiff = _absdiff(hop_latency, prev_latest.hop_latency);
-      // if (absdiff >= THR_C_SWITCH[0]) {
-      //   _push_event_to_RI(ring_index,
-      //                     node->node_id,
-      //                     absdiff,
-      //                     EVENT_C_SWITCH | metric_id,
-      //                     event_timestamp);
-      // }
+      e2e_prev_hop += prev_latest;
       mem_read_atomic(&avg_sample, &entry->int_metric_info_value.average[k], sizeof(avg_sample));
 
       avg_sample.node_id              = node->node_id;
-      avg_sample.hop_latency         = (avg_sample.hop_latency         * (entry->packet_count - 1) + hop_latency)               / entry->packet_count;
-      avg_sample.queue_occupancy     = (avg_sample.queue_occupancy     * (entry->packet_count - 1) + node->queue_occupancy)     / entry->packet_count;
-      avg_sample.egress_interface_tx = (avg_sample.egress_interface_tx * (entry->packet_count - 1) + node->egress_interface_tx) / entry->packet_count;
+      avg_sample.hop_latency         = (avg_sample.hop_latency         * (packet_count - 1) + hop_latency)               / packet_count;
+      avg_sample.queue_occupancy     = (avg_sample.queue_occupancy     * (packet_count - 1) + node->queue_occupancy)     / packet_count;
+      avg_sample.egress_interface_tx = (avg_sample.egress_interface_tx * (packet_count - 1) + node->egress_interface_tx) / packet_count;
 
       mem_write_atomic(&avg_sample, &entry->int_metric_info_value.average[k], sizeof(avg_sample));
-      
+
     } else {
       mem_write_atomic(&sample, &entry->int_metric_info_value.average[k], sizeof(sample));
-
       /* This way, we wont trigger a C-event e2e */
-      // e2e_prev_hop = e2e_curr_hop;
+      e2e_prev_hop = e2e_curr_hop;
     }
     /* We can write after the IF without problem */
     mem_write_atomic(&sample, &entry->int_metric_info_value.latest[k], sizeof(sample));
   }
-  // if (entry->packet_count > 1) {
-    ts_evict_fin = me_tsc_read();
-  _save_global_sample(ts_evict_inicio, ts_evict_fin);
-  // }
-  
   semaphore_up(&global_semaphores[hash_value]);
 
+  // ts_evict_inicio = me_tsc_read();
+  for (k = 0; k < cant_nodes && k < MAX_INT_NODES; k++) {
+    node = (__lmem struct pif_header_ingress__node1_metadata *)node_metadata_ptrs[k];
+    /* === Per-switch T-events on HOP === */
+    hop_latency = node->hop_latency;
+    if (hop_latency >= THR_T_SWITCH[0]) {
+      _push_event_to_RI(ring_index,
+                        node->node_id,
+                        hop_latency,
+                        EVENT_T_SWITCH | METRIC_HOP,
+                        event_timestamp);
+    }
+
+    /* NOTE: We control C-events when there is more than one packet */
+    if (packet_count > 1) {
+      uint32_t prev = prev_latest_buf[k];
+      /* === Per-switch C-events on HOP === */
+      absdiff = _absdiff(hop_latency, prev);
+      if (absdiff >= THR_C_SWITCH[0]) {
+        _push_event_to_RI(ring_index,
+                          node->node_id,
+                          absdiff,
+                          EVENT_C_SWITCH | METRIC_HOP,
+                          event_timestamp);
+      }
+    }
+  }
+
   /* === End-to-end hop-latency events (T/C) === */
-  // if (e2e_curr_hop >= THR_T_E2E[0]) {
-  //   _push_event_to_RI(ring_index,
-  //                     E2E_SWITCH_ID,
-  //                     e2e_curr_hop,
-  //                     EVENT_T_E2E | METRIC_HOP,
-  //                     event_timestamp);
-  // }
-  // absdiff = _absdiff(e2e_curr_hop, e2e_prev_hop);
-  // if (absdiff >= THR_C_E2E[0]) {
-  //   _push_event_to_RI(ring_index,
-  //                     E2E_SWITCH_ID,
-  //                     absdiff,
-  //                     EVENT_C_E2E | METRIC_HOP,
-  //                     event_timestamp);
-  // }
+  if (e2e_curr_hop >= THR_T_E2E[0]) {
+    _push_event_to_RI(ring_index,
+                      E2E_SWITCH_ID,
+                      e2e_curr_hop,
+                      EVENT_T_E2E | METRIC_HOP,
+                      event_timestamp);
+  }
+
+  absdiff = _absdiff(e2e_curr_hop, e2e_prev_hop);
+  if (absdiff >= THR_C_E2E[0]) {
+    _push_event_to_RI(ring_index,
+                      E2E_SWITCH_ID,
+                      absdiff,
+                      EVENT_C_E2E | METRIC_HOP,
+                      event_timestamp);
+  }
+
+  // ts_evict_fin = me_tsc_read();
+  // _save_global_sample(ts_evict_inicio, ts_evict_fin);
 
   return PIF_PLUGIN_RETURN_FORWARD;
 }
