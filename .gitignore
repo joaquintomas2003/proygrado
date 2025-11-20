@@ -11,6 +11,7 @@ wire/out/
 wire/pifout/
 Makefile-nfp4build
 evaluation/*.txt
+evaluation/plots/*.png
 evaluation/*.csv
 evaluation/eviction/*.csv
 evaluation/event/*.csv
