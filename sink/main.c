@@ -227,7 +227,12 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
           sample = victim_entry->int_metric_info_value.latest[k];
           mem_write_atomic(&sample, &ring_entry->int_metric_info_value.latest[k], sizeof(sample));
 
-          sample = victim_entry->int_metric_info_value.average[k];
+          avg_sample = victim_entry->int_metric_info_value.average[k];
+        
+          avg_sample.hop_latency         = avg_sample.hop_latency         / packet_count_lru;
+          avg_sample.queue_occupancy     = avg_sample.queue_occupancy     / packet_count_lru;
+          avg_sample.egress_interface_tx = avg_sample.egress_interface_tx / packet_count_lru;
+
           mem_write_atomic(&sample, &ring_entry->int_metric_info_value.average[k], sizeof(sample));
         }
         wp = (wp + 1) & (RING_SIZE - 1);
@@ -328,9 +333,9 @@ save_entry:
       mem_read_atomic(&avg_sample, &entry->int_metric_info_value.average[k], sizeof(avg_sample));
 
       avg_sample.node_id              = node->node_id;
-      avg_sample.hop_latency         = (avg_sample.hop_latency         * (entry->packet_count - 1) + hop_latency)               / entry->packet_count;
-      avg_sample.queue_occupancy     = (avg_sample.queue_occupancy     * (entry->packet_count - 1) + node->queue_occupancy)     / entry->packet_count;
-      avg_sample.egress_interface_tx = (avg_sample.egress_interface_tx * (entry->packet_count - 1) + node->egress_interface_tx) / entry->packet_count;
+      avg_sample.hop_latency         = avg_sample.hop_latency         + hop_latency;
+      avg_sample.queue_occupancy     = avg_sample.queue_occupancy     + node->queue_occupancy;
+      avg_sample.egress_interface_tx = avg_sample.egress_interface_tx + node->egress_interface_tx;
 
       mem_write_atomic(&avg_sample, &entry->int_metric_info_value.average[k], sizeof(avg_sample));
     } else {
