@@ -89,6 +89,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   __addr40 __emem bucket_entry *entry = 0;
   __addr40 __emem bucket_entry *victim_entry = 0;
   __addr40 __emem bucket_entry *ring_entry = 0;
+  __addr40 __emem bucket_entry *empty_entry  = 0;
 
   __xrw    ring_meta ring_meta_read;
   __xrw    int_metric_sample avg_sample;
@@ -98,7 +99,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   __xwrite int_metric_sample sample;
   __xwrite uint32_t key_reset[4] = {0, 0, 0, 0};
   __xwrite uint32_t key[4];
-  __xwrite uint32_t packet_count_lru;
+  __xrw uint32_t packet_count_lru;
   __xwrite uint32_t request_meta_lru;
   __xwrite uint32_t nodes_present;
   __xwrite uint32_t request_meta;
@@ -110,6 +111,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   uint32_t hash_key[4];
   uint32_t hash_value;
   uint32_t evict_selected = 0;
+  uint32_t empty_selected = 0;
   uint32_t wp, rp, f;
   uint32_t ring_index;
   uint32_t cant_nodes;
@@ -121,6 +123,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   uint64_t min_ts = 0xFFFFFFFFFFFFFFFFULL;
   uint64_t aged_ts;
   uint64_t event_timestamp;
+  uint64_t diff;
 
   void     *node_metadata_ptrs[MAX_INT_NODES];
 
@@ -151,19 +154,35 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
   for (i = 0; i < BUCKET_SIZE; i++) {
     entry = &int_flowcache[hash_value].entry[i];
 
-    if (entry->packet_count == 0 ||
-       (entry->key[0] == hash_key[0] &&
+    if (entry->key[0] == hash_key[0] &&
         entry->key[1] == hash_key[1] &&
         entry->key[2] == hash_key[2] &&
-        entry->key[3] == hash_key[3])) {
-      break;
+        entry->key[3] == hash_key[3]) {
+      goto save_entry;
     }
+
+    if (!empty_selected && entry->packet_count == 0) {
+        empty_selected = 1;
+        empty_entry    = entry;
+    }
+
+    if (empty_selected) {
+      if (i == BUCKET_SIZE - 1) {
+            entry = empty_entry;
+            goto save_entry;
+        }
+      continue;
+    }
+
+    if (evict_selected) continue;
+
     /* Check for aged entries */
-    if (get_time_diff_ns(entry->last_update_timestamp) > AGE_THRESHOLD_NS) {
-        aged_ts        = get_time_diff_ns(entry->last_update_timestamp);
+    diff = get_time_diff_ns(entry->last_update_timestamp);
+    if (diff > AGE_THRESHOLD_NS) {
+        aged_ts        = diff;
         victim_entry   = entry;
         evict_selected = 1;
-        break;
+        continue;
     }
     /* Keep track of the LRU bucket in case of no aged entries */
     if (entry->last_update_timestamp < min_ts) {
@@ -171,8 +190,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
         victim_entry = entry;
     }
   }
-  if (evict_selected) timestamp = aged_ts;
-  else timestamp = min_ts;
+  timestamp = evict_selected ? aged_ts : min_ts;
 
   // If we reached the end of the bucket without finding a match
   if (i == BUCKET_SIZE || evict_selected) {
@@ -232,6 +250,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
     semaphore_up(&ring_buffer_sem_G[ring_index]);
   }
 
+save_entry:
   // Metadata pointers for nodes
   node_metadata_ptrs[0] = headers + PIF_PARREP_ingress__node1_metadata_OFF_LW;
   node_metadata_ptrs[1] = headers + PIF_PARREP_ingress__node2_metadata_OFF_LW;
@@ -246,6 +265,7 @@ int pif_plugin_save_in_hash(EXTRACTED_HEADERS_T *headers, MATCH_DATA_T *match_da
 
   // Increment the packet count
   mem_incr32(&entry->packet_count);
+  mem_read_atomic(&packet_count_lru, &entry->packet_count, sizeof(packet_count_lru));
 
   nodes_present = scalars->metadata__nodes_present;
   cant_nodes    = scalars->metadata__nodes_present;

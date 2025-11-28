@@ -48,7 +48,7 @@ header ipv4_t {
 header udp_t {
   bit<16> src_port;
   bit<16> dst_port;
-  bit<16> length_;
+  bit<16> length;
   bit<16> checksum;
 }
 
@@ -504,52 +504,73 @@ control MyIngress(inout headers hdr,
   }
 
   apply {
-    if (hdr.ipv4.isValid()) {
-      populate_requested_metadata();
+    if(standard_metadata.ingress_port == 0) {
+      standard_metadata.egress_spec = 768;
+    }
+    else if(standard_metadata.ingress_port == 771) {
+      standard_metadata.egress_spec = 1;
+    }
+    else if (standard_metadata.ingress_port == 768) {
+      if (hdr.ipv4.isValid()) {
+        populate_requested_metadata();
 
-      if (meta.bitmap.node_id == 1) {
-        populate_node_id_metadata();
-        pop_from_stacks();
-      }
-      if (meta.bitmap.level1_interfaces == 1) {
-        populate_level1_interfaces_metadata();
-        pop_from_stacks();
-      }
-      if (meta.bitmap.hop_latency == 1) {
-        populate_hop_latency_metadata();
-        pop_from_stacks();
-      }
-      if (meta.bitmap.queue_occupancy == 1) {
-        populate_queue_occupancy_metadata();
-        pop_from_stacks();
-      }
-      if (meta.bitmap.ingress_timestamp == 1) {
-        populate_ingress_timestamp_metadata();
-        pop_from_stacks();
-        pop_from_stacks();
-      }
-      if (meta.bitmap.egress_timestamp == 1) {
-        populate_egress_timestamp_metadata();
-        pop_from_stacks();
-        pop_from_stacks();
-      }
-      if (meta.bitmap.level2_interfaces == 1) {
-        populate_level2_interfaces_metadata();
-        pop_from_stacks();
-        pop_from_stacks();
-      }
-      if (meta.bitmap.egress_interface_tx == 1) {
-        populate_egress_interface_tx_metadata();
-        pop_from_stacks();
-      }
-      if (meta.bitmap.buffer_occupancy == 1) {
-        populate_buffer_occupancy_metadata();
-      }
+        if (meta.bitmap.node_id == 1) {
+          populate_node_id_metadata();
+          pop_from_stacks();
+        }
+        if (meta.bitmap.level1_interfaces == 1) {
+          populate_level1_interfaces_metadata();
+          pop_from_stacks();
+        }
+        if (meta.bitmap.hop_latency == 1) {
+          populate_hop_latency_metadata();
+          pop_from_stacks();
+        }
+        if (meta.bitmap.queue_occupancy == 1) {
+          populate_queue_occupancy_metadata();
+          pop_from_stacks();
+        }
+        if (meta.bitmap.ingress_timestamp == 1) {
+          populate_ingress_timestamp_metadata();
+          pop_from_stacks();
+          pop_from_stacks();
+        }
+        if (meta.bitmap.egress_timestamp == 1) {
+          populate_egress_timestamp_metadata();
+          pop_from_stacks();
+          pop_from_stacks();
+        }
+        if (meta.bitmap.level2_interfaces == 1) {
+          populate_level2_interfaces_metadata();
+          pop_from_stacks();
+          pop_from_stacks();
+        }
+        if (meta.bitmap.egress_interface_tx == 1) {
+          populate_egress_interface_tx_metadata();
+          pop_from_stacks();
+        }
+        if (meta.bitmap.buffer_occupancy == 1) {
+          populate_buffer_occupancy_metadata();
+        }
 
-      if (hdr.intl4_shim.isValid()) {
-        if (hdr.app_metadata.isValid()){
-          save_in_hash();
-          standard_metadata.egress_spec = 769;
+        if (hdr.intl4_shim.isValid()) {
+          if (hdr.app_metadata.isValid()){
+            save_in_hash();
+
+            hdr.int_header.setInvalid();
+            hdr.intl4_shim.setInvalid();
+
+            if (hdr.intl4_shim.npt == 1) {
+              hdr.udp.dst_port = (bit<16>)(hdr.intl4_shim.first_word_of_udp_port) << 8 | (bit<16>) hdr.intl4_shim.reserved;
+            }
+
+            bit<16> ipv4_header_bytes = 20;
+            bit<16> udp_new_length = hdr.udp.length - (bit<16>)(4 + hdr.intl4_shim.len * 4);
+            hdr.udp.length = udp_new_length;
+            hdr.ipv4.total_len = ipv4_header_bytes + udp_new_length;
+
+            standard_metadata.egress_spec = 771;
+          }
         }
       }
     }

@@ -5,20 +5,21 @@
 #include "time_utils.h"
 #include "data_structures.h"
 
-void evict_stale_entries(uint64_t threshold_ns) {
+void evict_stale_entries(uint64_t threshold_ns, uint32_t start_row, uint32_t end_row) {
     __xrw ring_meta ring_meta_read;
+    __xrw uint32_t wp_read;
+    // __xrw uint32_t rp_read;
     __volatile __addr40 __emem bucket_entry *entry;
     __volatile __addr40 __emem ring_meta *ring_info;
     __volatile __addr40 __emem bucket_entry *r_entry;
     uint32_t wp, rp, f;
     uint32_t i, j, ring_index;
     uint64_t last_ts;
-    __xrw uint64_t last_ts_xrw;
     uint32_t zero = 0;
     uint32_t key_reset[4] = {0,0,0,0};
     uint32_t k;
 
-    for (i = 0; i < FLOWCACHE_ROWS; i++) {
+    for (i = start_row; i < end_row; i++) {
       semaphore_down(&global_semaphores[i]);
         // Determine ring index
         ring_index = i & (NUM_RINGS - 1);
@@ -27,16 +28,19 @@ void evict_stale_entries(uint64_t threshold_ns) {
             last_ts = entry->last_update_timestamp;
 
             if (entry->packet_count != 0 && get_time_diff_ns(last_ts) > threshold_ns) {
-                
+
                 semaphore_down(&ring_buffer_sem_G[ring_index]);
                   ring_info = &ring_G[ring_index];
 
-                  mem_read_atomic(&ring_meta_read, (__mem void *)ring_info, sizeof(ring_meta_read));
-                  wp = ring_meta_read.write_pointer;
-                  rp = ring_meta_read.read_pointer;
-                  f  = ring_meta_read.full;
+                  mem_read_atomic(&wp_read, (__mem void *)&ring_info->write_pointer, sizeof(wp_read));
+                  wp = wp_read;
+                  // mem_read_atomic(&rp_read, (__mem void *)&ring_info->read_pointer, sizeof(rp_read));
+                  // mem_read_atomic(&ring_meta_read, (__mem void *)ring_info, sizeof(ring_meta_read));
+                  // wp = ring_meta_read.write_pointer;
+                  // rp = ring_meta_read.read_pointer;
+                  // f  = ring_meta_read.full;
 
-                  if (f == 0) {
+                  // if (f == 0) {
                     // Get ring entry pointer
                     r_entry = &ring_buffer_G[ring_index].entry[wp];
 
@@ -107,7 +111,7 @@ void evict_stale_entries(uint64_t threshold_ns) {
 
                     // Advance write pointer
                     wp = (wp + 1) & (RING_SIZE - 1);
-                    if (wp == rp) f = 1;
+                    // if (wp == rp) f = 1;
 
                     // Free the bucket
                     {
@@ -124,14 +128,16 @@ void evict_stale_entries(uint64_t threshold_ns) {
                           sizeof(key_reset_xrw));
                     }
 
-                  }
+                  // }
                   // Update ring metadata
-                  ring_meta_read.write_pointer = wp;
-                  ring_meta_read.full          = f;
-                  ring_meta_read.read_pointer  = rp;
-                  mem_write_atomic(&ring_meta_read,
-                                  (__mem void *)ring_info,
-                                  sizeof(ring_meta_read));
+                  wp_read = wp;
+                  // ring_meta_read.write_pointer = wp;
+                  // ring_meta_read.full          = f;
+                  // ring_meta_read.read_pointer  = rp;
+                  // mem_write_atomic(&ring_meta_read,
+                  //                 (__mem void *)ring_info,
+                  //                 sizeof(ring_meta_read));
+                  mem_write_atomic(&wp_read, (__mem void *)&ring_info->write_pointer, sizeof(wp_read));
                 semaphore_up(&ring_buffer_sem_G[ring_index]);
             }
         }
@@ -139,17 +145,26 @@ void evict_stale_entries(uint64_t threshold_ns) {
     }
 }
 
-__export __mem40 uint32_t timers = 0;
-
 void main(void)
 {
-    // Only one thread launches the periodic eviction timer
-    if (ctx() == 0 && timers == 0) {
-        timers++;
+    uint32_t me_num, half;
+    uint32_t start_row, end_row;
+    me_num = (_ME() & 0xF) - 4;
+    half = FLOWCACHE_ROWS / 2;
 
+    if (me_num == 0) {
+        start_row = 0;
+        end_row   = half;
+    } else {
+        start_row = half;
+        end_row   = FLOWCACHE_ROWS;
+    }
+
+    // Only one thread launches the periodic eviction timer
+    if (ctx() == 0) {
         while (1) {
             // Call the eviction routine
-            evict_stale_entries(AGE_THRESHOLD_NS);
+            evict_stale_entries(AGE_THRESHOLD_NS, start_row, end_row);
         }
     }
 }

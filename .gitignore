@@ -1,16 +1,20 @@
 .DS_Store
-sink/out/
-sink/pifout/
-sink/*.list
-sink/*.obj
-transit_hop/out/
-transit_hop/pifout/
-transit_hop/*.list
-transit_hop/*.obj
-Makefile-nfp4build
+src/sink/out/
+src/sink/pifout/
+src/sink/*.list
+src/sink/*.obj
+src/transit_hop/out/
+src/transit_hop/pifout/
+src/transit_hop/*.list
+src/transit_hop/*.obj
+src/wire/out/
+src/wire/pifout/
+src/Makefile-nfp4build
 
-traffic-generator/traces/*
-!traffic-generator/traces/.keep
+src/traffic-generator/traces/*
+!src/traffic-generator/traces/.keep
 
-host/*.o
-host/host_reader
+src/host/*.o
+src/host/host_reader
+
+src/tcpreplay.log
