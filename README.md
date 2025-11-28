@@ -1,4 +1,4 @@
-# Proyecto de Grado - In-band Network Telemetry
+# Proyecto de Grado: Programabilidad de Red aplicada al Monitoreo mediante In-band Network Telemetry
 
 ## Descripción General
 Este repositorio contiene el código fuente desarrollado para el Proyecto de Grado titulado "Programabilidad de Red aplicada al Monitoreo mediante In-band Network Telemetry".
@@ -24,6 +24,8 @@ Dentro de `src/`, la estructura es la siguiente:
 - `wire/`: programa p4 básico para pruebas de baseline.
 
 ## Uso 
+Para utilizar la plataforma se deben satisfacer los requisitos de hardware y software detallados en la sección de Requisitos.
+
 ### Como usar Sink
 - Compilar el programa P4 del Sink:
 ```bash
@@ -41,7 +43,32 @@ cd ../host
 sudo make restart
 ```
 
-### ELK
+### Como enviar tráfico con INT al Sink
+
+1. **Generar la traza**: Si se desea generar una traza (`.pcap`) de tráfico con INT:
+   - Moverse al directorio del generador de tráfico:
+     ```bash
+     cd traffic_generator
+     ```
+   - Si se desea ajustar la configuración del tráfico, editar el archivo `config.yaml`.
+   - Correr el generador de tráfico:
+     ```bash
+     python3 int_injector.py
+     ```
+     Ese script insertará metadatos INT en los paquetes de la traza original indicada en `config.yaml`.
+
+2. **Enviar la traza al Sink**: Para enviar la traza generada al Sink, se puede utilizar `tcpreplay`:
+   ```bash
+   sudo tcpreplay -i <INTERFAZ_DE_LA_SMARTNIC> --topspeed generated_int.pcap
+    ```
+    O usar Moongen (se debe asociar la interfaz virtual a DPDK primero, así como configurar las hugepages):
+    ```bash
+    ./bin/dpdk_bind_if vf0_0
+    sudo ~/MoonGen/setup-hugetlbfs.sh
+    sudo MoonGen evaluation/replay_pcap.lua 0 -n 1 traffic-generator/generated_int.pcap
+    ```
+
+### Como usar stack ELK
 **Scripts para stack de Elastic + Filebeat**
 
 Este proyecto incluye dos scripts para manejar la infraestructura de monitoreo:
@@ -64,13 +91,21 @@ Luego, abrir en el navegador el siguiente enlace:
 http://localhost:5601
 ```
 
-**⚠️ Advertencia**
-
-El host debe contar con **Elasticsearch**, **Kibana** y **Filebeat** instalados.  
-Estos pueden instalarse utilizando `apt-get` y siguiendo las instrucciones en sus sitios oficiales.
-
 ### Como usar Dissector
 - Correr el script `utils/reload_dissector.sh`
 - En Wireshark hacer "Reload Lua Plugins" (`Shift + Cmd + L` en mac)
 
 Hacer eso la primera vez y cuando hayan cambios en el dissector
+
+## Requisitos
+Además de los requisitos de hardware como las SmartNICs Netronome Agilio CX 2x10GbE (no se experimentaron otras; podrían funcionar otras SmartNICs compatibles con P4), se necesitan las siguientes herramientas de software:
+- Kernel de linux compatible con las SmartNICs de Netronome (en este trabajo se utilizó Unbuntu `18.04.6 LTS` con kernel `4.18.0-15-generic`)
+- SDK de Netronome / NFP Drivers
+- Soporte para hugepages (requerido para DPDK y MoonGen)
+- DPDK
+- MoonGen (requiere LuaJIT)
+- Elasticsearch
+- Kibana
+- Filebeat
+- Wireshark + tshark
+- Python3 y bibliotecas asociadas (por ejemplo `scapy`)
