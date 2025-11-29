@@ -342,7 +342,7 @@ save_entry:
   // _save_global_sample(ts_evict_inicio, ts_evict_fin);
   semaphore_up(&global_semaphores[hash_value]);
 
-  ts_evict_inicio = me_tsc_read();
+  // ts_evict_inicio = me_tsc_read();
   for (k = 0; k < cant_nodes && k < MAX_INT_NODES; k++) {
     node = (__lmem struct pif_header_ingress__node1_metadata *)node_metadata_ptrs[k];
     /* === Per-switch T-events on HOP === */
@@ -388,8 +388,8 @@ save_entry:
                       event_timestamp);
   }
 
-  ts_evict_fin = me_tsc_read();
-  _save_global_sample(ts_evict_inicio, ts_evict_fin);
+  // ts_evict_fin = me_tsc_read();
+  // _save_global_sample(ts_evict_inicio, ts_evict_fin);
 
   return PIF_PLUGIN_RETURN_FORWARD;
 }
