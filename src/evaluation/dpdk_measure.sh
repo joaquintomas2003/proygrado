@@ -7,7 +7,7 @@ PCAP_OUT_NAME="capture_$(date +%H%M%S).pcap"  # unique filename in RAM disk
 PCAP_OUT_PATH="/mnt/ramdisk/$PCAP_OUT_NAME"
 
 # TRACE TO REPLAY
-TRACE_PATH="$HOME/epifanio_proygrado/traffic-generator/traces/generated_int.pcap"
+TRACE_PATH="$HOME/epifanio_proygrado/src/traffic-generator/traces/generated_int.pcap"
 REPLAY_SCRIPT="evaluation/replay_pcap.lua"
 DEV_TX=0                                      # MoonGen device id
 ITERATIONS=100                                # how many times to replay

@@ -4,7 +4,7 @@ set -euo pipefail
 INGRESS_IF="veth1"
 EGRESS_IF="veth3"
 USER_HOME="$(getent passwd "${SUDO_USER:-$USER}" | cut -d: -f6)"
-SRC_PCAP="${USER_HOME}/proygrado/traffic-generator/traces/generated_int.pcap"
+SRC_PCAP="${USER_HOME}/proygrado/src/traffic-generator/traces/generated_int.pcap"
 OUT_PCAP="./output_from_switch.pcap"
 
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
