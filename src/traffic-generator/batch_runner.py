@@ -1,7 +1,6 @@
 import os
 import subprocess
 import yaml
-from itertools import combinations
 
 BASE_CONFIG = "config.yaml"
 OUT_BASE = "traces/int_injected"
@@ -15,13 +14,22 @@ INSTRUCTION_SETS = [
     [0, 2, 3, 7],
 ]
 
-# Hop lists
+# Request hop lists
 HOP_SETS = [
     [1],
     [1, 2],
     [1, 2, 3],
     [1, 2, 3, 4],
     [1, 2, 3, 4, 5],
+]
+
+# Response hop lists
+REVERSE_HOP_SETS = [
+    [6],
+    [7, 6],
+    [8, 7, 6],
+    [9, 8, 7, 6],
+    [10, 9, 8, 7, 6],
 ]
 
 def load_base_config():
@@ -38,14 +46,17 @@ def run_generation(cfg_path):
 def main():
     os.makedirs(OUT_BASE, exist_ok=True)
 
-    for hops in HOP_SETS:
+    for idx, hops in enumerate(HOP_SETS):
+        reverse_hops = REVERSE_HOP_SETS[idx]
+
         hop_dir = os.path.join(OUT_BASE, f"{len(hops)}node")
         os.makedirs(hop_dir, exist_ok=True)
 
         for inst_idx, instruction_bits in enumerate(INSTRUCTION_SETS, start=1):
             cfg = load_base_config()
 
-            cfg["hops"] = hops
+            cfg["forward_hops"] = hops
+            cfg["reverse_hops"] = reverse_hops
             cfg["instruction_bits"] = instruction_bits
 
             output_pcap = os.path.join(hop_dir, f"{inst_idx}instructions.pcap")
@@ -54,8 +65,11 @@ def main():
             temp_cfg_path = "config.yaml"
             save_temp_config(cfg, temp_cfg_path)
 
-            print(f"\n Running for hops={hops}, instructions={instruction_bits}")
-            print(f"→ Output: {output_pcap}")
+            print(f"\nRunning for:")
+            print(f"  forward_hops={hops}")
+            print(f"  reverse_hops={reverse_hops}")
+            print(f"  instructions={instruction_bits}")
+            print(f"  → Output: {output_pcap}")
 
             run_generation(temp_cfg_path)
 
