@@ -55,8 +55,8 @@ def main():
         for inst_idx, instruction_bits in enumerate(INSTRUCTION_SETS, start=1):
             cfg = load_base_config()
 
-            cfg["forward_hops"] = hops
-            cfg["reverse_hops"] = reverse_hops
+            cfg["request_hops"] = hops
+            cfg["response_hops"] = reverse_hops
             cfg["instruction_bits"] = instruction_bits
 
             output_pcap = os.path.join(hop_dir, f"{inst_idx}instructions.pcap")
