@@ -12,7 +12,8 @@ dst_port: 80
 num_flows: 15
 
 rhc: 5
-hops: [1, 2, 3, 4, 5]
+request_hops: [1, 2, 3, 4, 5]
+response_hops: [10, 9, 8, 7, 6]
 
 instruction_bits: [0, 2, 3, 7]  # Node ID, Hop latency
 

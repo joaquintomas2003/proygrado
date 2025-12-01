@@ -169,9 +169,8 @@ def build_app_metadata(packet_id: int, is_response: bool):
     flag_byte = (1 << 7) if is_response else 0
     return struct.pack("!HB", packet_id, flag_byte)
 
-def inject_int(pkt, cfg, rng, params, int_udp_dst_port):
+def inject_int(pkt, cfg, rng, params, int_udp_dst_port, hop_ids):
     # --- metadata config ---
-    hop_ids = cfg.get("hops", [1,2,3,4,5])
     num_hops = len(hop_ids)
     chosen_bits = cfg.get("instruction_bits", [0, 2, 3, 7])
     instruction_bitmap = build_instruction_bitmap(chosen_bits)
@@ -315,6 +314,9 @@ def process_trace(cfg):
         "queue_max": 300,
         })
 
+    request_hops = cfg.get("request_hops", [1, 2, 3, 4, 5])
+    response_hops = cfg.get("response_hops", [10, 9, 8, 7, 6])
+
     print(f"Loading {input_pcap} ...")
     in_packets = rdpcap(input_pcap)
     print(f"Read {len(in_packets)} packets")
@@ -353,11 +355,13 @@ def process_trace(cfg):
                 base_pkt = base_pkt / Raw(app_md)
         next_packet_id += 1
 
-        # INT a ambos
-        for app_pkt in [request_pkt, response_pkt]:
-            new_pkt = inject_int(app_pkt, cfg, rng, params, int_udp_dst_port)
-            out_packets.append(new_pkt)
-            written += 1
+        new_req_pkt = inject_int(request_pkt, cfg, rng, params, int_udp_dst_port, hop_ids=request_hops)
+        out_packets.append(new_req_pkt)
+        written += 1
+
+        new_resp_pkt = inject_int(response_pkt, cfg, rng, params, int_udp_dst_port, hop_ids=response_hops)
+        out_packets.append(new_resp_pkt)
+        written += 1
 
     wrpcap(output_pcap, out_packets)
     print(f"Done. Wrote {written} packets to {output_pcap}")
